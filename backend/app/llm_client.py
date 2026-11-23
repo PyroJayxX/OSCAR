@@ -1,3 +1,7 @@
+"""
+Unified LLM client supporting both Ollama and Groq providers.
+All existing code should call only the functions in this module.
+"""
 import asyncio
 import json
 import re
@@ -37,6 +41,8 @@ def _strip_stray_parens(text: str) -> str:
 
 
 def _close_unbalanced_json(text: str) -> str:
+    """Append closing brackets/quote to repair JSON the model cut off after a
+    premature stop token (observed: valid content, missing trailing braces)."""
     stack = []
     in_string = False
     escape = False

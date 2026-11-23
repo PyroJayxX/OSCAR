@@ -1,62 +1,342 @@
-{
-  "data_science": {
-    "label": "Data Science",
-    "questions": [
-      "Explain the bias-variance tradeoff and how it influences model selection.",
-      "How would you handle a dataset with significant class imbalance?",
-      "Walk me through how you'd validate that an A/B test result is statistically significant.",
-      "What is the difference between L1 and L2 regularization, and when would you use each?",
-      "How do you detect and handle multicollinearity in a regression model?",
-      "Explain how a random forest works and why it tends to reduce overfitting compared to a single decision tree.",
-      "You're given a dataset with a lot of missing values. Walk me through your approach to handling them.",
-      "What metrics would you use to evaluate a classification model on an imbalanced dataset, and why not just accuracy?",
-      "Explain the difference between bagging and boosting.",
-      "How would you design an experiment to measure the causal effect of a new feature on user retention?"
-    ]
+[
+  {
+    "id": "sql-001",
+    "topic": "sql",
+    "difficulty": "easy",
+    "type": "concept",
+    "text": "What is the difference between INNER JOIN and LEFT JOIN in SQL?",
+    "key_points": [
+      "INNER JOIN returns only rows with matching values in both tables",
+      "LEFT JOIN returns all rows from the left table and matched rows from the right",
+      "NULL values appear in right-table columns when no match exists in LEFT JOIN",
+      "INNER JOIN can reduce row count; LEFT JOIN preserves left-table row count",
+      "Choose based on whether you need unmatched rows from the primary table"
+    ],
+    "common_mistakes": [
+      "Confusing which table is 'left' vs 'right' in the query",
+      "Assuming LEFT JOIN never returns NULLs",
+      "Using INNER JOIN when you need to keep all records from one table"
+    ],
+    "model_answer": "An INNER JOIN only gives you rows where both tables have a match. A LEFT JOIN keeps every row from the first table and fills in NULLs where the second table has no match. So if I'm listing all customers and their orders, LEFT JOIN shows customers with zero orders too, while INNER JOIN only shows customers who've actually ordered something.",
+    "generated": true
   },
-  "system_design": {
-    "label": "System Design",
-    "questions": [
-      "Design a URL shortening service like bit.ly. What are the key components and how do they scale?",
-      "How would you design a rate limiter for a public API?",
-      "Design a notification system that can send push, email, and SMS to millions of users.",
-      "Walk me through designing a distributed cache. What consistency and eviction tradeoffs would you make?",
-      "How would you design a system to handle real-time chat for millions of concurrent users?",
-      "Design a news feed system like Twitter's timeline. How do you handle fan-out on write vs. read?",
-      "How would you design a distributed job scheduler that guarantees at-least-once execution?",
-      "Design a file storage service like Dropbox. How do you handle sync and conflict resolution?",
-      "How would you shard a relational database that's outgrown a single instance?",
-      "Design an API for a ride-sharing app's driver-matching system. What are the key latency and consistency concerns?"
-    ]
+  {
+    "id": "sql-002",
+    "topic": "sql",
+    "difficulty": "medium",
+    "type": "unknown_term",
+    "text": "How would you use a window function to calculate a running total of sales by date?",
+    "key_points": [
+      "Window functions operate over a set of rows related to the current row",
+      "SUM() OVER (ORDER BY date ROWS UNBOUNDED PRECEDING) computes running total",
+      "PARTITION BY can reset the running total per group (e.g., per store)",
+      "Honest reasoning: explain what you know and what you'd look up",
+      "Ask clarifying question: what's the exact schema and grain of the data?",
+      "Learning plan: practice with SUM/COUNT/AVG OVER, then ROW_NUMBER, RANK, LAG/LEAD"
+    ],
+    "common_mistakes": [
+      "Confusing window functions with aggregate GROUP BY queries",
+      "Forgetting ORDER BY inside OVER clause for running calculations",
+      "Not understanding frame clauses (ROWS vs RANGE, UNBOUNDED PRECEDING)"
+    ],
+    "model_answer": "I'd use SUM(sales) OVER (ORDER BY sale_date ROWS UNBOUNDED PRECEDING) to get a running total. The ORDER BY defines the sequence, and UNBOUNDED PRECEDING means start from the first row. If I needed it per store, I'd add PARTITION BY store_id. I haven't used window functions extensively in production, so I'd verify the exact syntax and test with sample data first.",
+    "generated": true
   },
-  "behavioral": {
-    "label": "Behavioral",
-    "questions": [
-      "Tell me about a time you disagreed with a teammate or manager. How did you handle it?",
-      "Describe a project that failed. What went wrong and what did you learn?",
-      "Tell me about a time you had to deliver difficult feedback to someone.",
-      "Describe a situation where you had to make a decision with incomplete information.",
-      "Tell me about a time you had to push back on a deadline or scope you thought was unrealistic.",
-      "Describe a time you took on something outside your job description.",
-      "Tell me about a time you mentored or helped a struggling teammate.",
-      "Describe a time you had to influence a decision without having direct authority.",
-      "Tell me about a time you made a mistake that impacted others. How did you handle it?",
-      "Describe a time you had to balance competing priorities from different stakeholders."
-    ]
+  {
+    "id": "python-001",
+    "topic": "python",
+    "difficulty": "easy",
+    "type": "concept",
+    "text": "What is the difference between a list and a tuple in Python?",
+    "key_points": [
+      "Lists are mutable (can be changed after creation); tuples are immutable",
+      "Lists use square brackets []; tuples use parentheses ()",
+      "Tuples can be dictionary keys; lists cannot (unhashable)",
+      "Tuples are slightly more memory-efficient and faster for iteration",
+      "Use tuples for fixed collections, lists for collections that change"
+    ],
+    "common_mistakes": [
+      "Trying to modify a tuple element (raises TypeError)",
+      "Using a list as a dictionary key",
+      "Assuming tuples are always faster — difference is negligible in most cases"
+    ],
+    "model_answer": "Lists are mutable — you can append, remove, or change elements. Tuples are immutable once created. That's why tuples can be dictionary keys but lists can't. I'd use a tuple for things that shouldn't change, like coordinates (x, y), and a list for things I need to modify, like a queue of tasks.",
+    "generated": true
   },
-  "frontend": {
-    "label": "Frontend",
-    "questions": [
-      "Explain the difference between the virtual DOM and the real DOM, and why it matters for performance.",
-      "How does the browser's event loop work, and how does that affect async code in JavaScript?",
-      "Walk me through how you'd optimize the load time of a React app with a large bundle size.",
-      "What are React hooks, and what problem do they solve compared to class components?",
-      "How would you implement accessible keyboard navigation for a custom dropdown component?",
-      "Explain the difference between CSS specificity, the cascade, and inheritance.",
-      "How does React's reconciliation algorithm decide what to re-render?",
-      "What's the difference between server-side rendering, static generation, and client-side rendering, and when would you choose each?",
-      "How would you debug a memory leak in a long-running single-page app?",
-      "Explain how you would design a design system's component API to be both flexible and hard to misuse."
-    ]
+  {
+    "id": "python-002",
+    "topic": "python",
+    "difficulty": "medium",
+    "type": "problem_solving",
+    "text": "Write a function that takes a list of dictionaries and returns only the dicts where 'status' equals 'active'.",
+    "key_points": [
+      "Use list comprehension: [d for d in data if d.get('status') == 'active']",
+      "Use .get() to avoid KeyError if 'status' key is missing",
+      "Alternative: filter() with lambda function",
+      "Handle edge cases: empty list, missing keys, None values",
+      "Return new list, don't mutate input"
+    ],
+    "common_mistakes": [
+      "Using d['status'] directly (raises KeyError if missing)",
+      "Mutating the original list instead of creating a new one",
+      "Forgetting to handle None or empty input"
+    ],
+    "model_answer": "I'd write a list comprehension: [item for item in data if item.get('status') == 'active']. Using .get() is safer than bracket notation because it returns None instead of crashing if the key doesn't exist. This creates a new list without modifying the original data.",
+    "generated": true
+  },
+  {
+    "id": "ml-001",
+    "topic": "ml",
+    "difficulty": "easy",
+    "type": "concept",
+    "text": "Explain the difference between supervised and unsupervised learning.",
+    "key_points": [
+      "Supervised learning uses labeled data (input + target output)",
+      "Unsupervised learning finds patterns in unlabeled data (no targets)",
+      "Supervised: classification and regression tasks",
+      "Unsupervised: clustering, dimensionality reduction, anomaly detection",
+      "Supervised needs labeled examples; unsupervised works with raw data"
+    ],
+    "common_mistakes": [
+      "Confusing unsupervised with reinforcement learning",
+      "Thinking unsupervised means 'no human involvement at all'",
+      "Assuming supervised is always better — depends on data availability"
+    ],
+    "model_answer": "Supervised learning means we have the answers — labeled data with inputs and correct outputs, like predicting house prices from features. Unsupervised learning finds structure without labels, like grouping customers into segments based on purchasing behavior. Supervised needs labeled data which is expensive; unsupervised works with whatever data you have.",
+    "generated": true
+  },
+  {
+    "id": "ml-002",
+    "topic": "ml",
+    "difficulty": "medium",
+    "type": "unknown_term",
+    "text": "What is gradient boosting and how does it differ from random forest?",
+    "key_points": [
+      "Boosting builds models sequentially; each corrects errors of the previous",
+      "Random forest builds trees in parallel (bagging); boosting is sequential",
+      "Gradient boosting uses gradient descent to minimize loss function",
+      "Honest reasoning: explain core idea and what you'd research further",
+      "Ask clarifying question: what's the use case — tabular, ranking, time series?",
+      "Learning plan: implement XGBoost/LightGBM on a dataset, tune learning_rate and n_estimators"
+    ],
+    "common_mistakes": [
+      "Confusing boosting with bagging (they're opposite approaches)",
+      "Thinking gradient boosting uses gradients of the trees themselves",
+      "Not mentioning overfitting risk and early stopping"
+    ],
+    "model_answer": "Gradient boosting builds trees one at a time, where each new tree tries to fix the mistakes of the previous ensemble. Random forest builds many trees independently and averages them. Boosting usually wins on accuracy but can overfit, so you need early stopping and learning rate tuning. I've read about XGBoost and LightGBM but haven't tuned them in production — I'd start with a small learning rate and cross-validation.",
+    "generated": true
+  },
+  {
+    "id": "genai-001",
+    "topic": "genai",
+    "difficulty": "easy",
+    "type": "concept",
+    "text": "What is a large language model (LLM) and how does it generate text?",
+    "key_points": [
+      "LLM is a neural network trained on massive text corpora",
+      "Predicts next token based on context (probabilistic, not deterministic)",
+      "Uses transformer architecture with attention mechanism",
+      "Training: pre-training on broad data, then fine-tuning for specific tasks",
+      "Output is sampled from probability distribution over vocabulary"
+    ],
+    "common_mistakes": [
+      "Thinking LLMs 'understand' or 'reason' like humans",
+      "Assuming deterministic output (same prompt = same output)",
+      "Confusing training data cutoff with knowledge cutoff"
+    ],
+    "model_answer": "An LLM is a huge neural network trained to predict the next word — or token — given all the previous words. It uses the transformer architecture with attention to weigh which parts of context matter. It doesn't truly understand; it's statistical prediction. During generation, it samples from a probability distribution over its vocabulary, which is why the same prompt can give different answers.",
+    "generated": true
+  },
+  {
+    "id": "genai-002",
+    "topic": "genai",
+    "difficulty": "medium",
+    "type": "unknown_term",
+    "text": "What is RAG (Retrieval-Augmented Generation) and when would you use it?",
+    "key_points": [
+      "RAG combines retrieval (search) with generation to ground LLM outputs",
+      "Retrieve relevant documents, then feed them as context to the LLM",
+      "Reduces hallucination by providing factual source material",
+      "Honest reasoning: explain the concept and what components you'd need",
+      "Ask clarifying question: what's the data source — PDFs, database, API?",
+      "Learning plan: build a mini RAG with LangChain/LlamaIndex, test chunking strategies"
+    ],
+    "common_mistakes": [
+      "Thinking RAG replaces fine-tuning (they solve different problems)",
+      "Ignoring chunking strategy and embedding model choice",
+      "Not evaluating retrieval quality separately from generation"
+    ],
+    "model_answer": "RAG stands for Retrieval-Augmented Generation. Instead of relying only on the model's training data, you first search a knowledge base for relevant documents, then pass those as context to the LLM. This grounds the answer in actual sources and reduces hallucination. I'd use it for company docs or recent data the model wasn't trained on. I've read about vector databases and embedding models but haven't built a full RAG pipeline — I'd start with a simple chunking strategy and evaluate retrieval recall.",
+    "generated": true
+  },
+  {
+    "id": "rest_api-001",
+    "topic": "rest_api",
+    "difficulty": "easy",
+    "type": "concept",
+    "text": "What are the main HTTP methods used in REST APIs and what does each do?",
+    "key_points": [
+      "GET: retrieve resource (safe, idempotent)",
+      "POST: create new resource (not idempotent)",
+      "PUT: replace entire resource (idempotent)",
+      "PATCH: partially update resource (not necessarily idempotent)",
+      "DELETE: remove resource (idempotent)"
+    ],
+    "common_mistakes": [
+      "Using GET for operations that change state",
+      "Confusing PUT (full replace) with PATCH (partial update)",
+      "Not understanding idempotency and why it matters for retries"
+    ],
+    "model_answer": "GET reads data, POST creates new resources, PUT replaces a whole resource, PATCH updates part of it, and DELETE removes it. GET, PUT, and DELETE are idempotent — calling them multiple times has the same effect as once. POST isn't idempotent, so retrying a POST might create duplicates. That's why idempotency keys matter for payments.",
+    "generated": true
+  },
+  {
+    "id": "rest_api-002",
+    "topic": "rest_api",
+    "difficulty": "medium",
+    "type": "problem_solving",
+    "text": "Design a REST endpoint for paginated search of users with optional filters (name, email, role).",
+    "key_points": [
+      "Use GET with query parameters: ?page=1&page_size=20&name=john&role=admin",
+      "Return metadata: total_count, page, page_size, total_pages",
+      "Validate page_size max (e.g., 100) to prevent abuse",
+      "Return 400 for invalid params, 200 with empty array for no results",
+      "Consider cursor-based pagination for large datasets"
+    ],
+    "common_mistakes": [
+      "Using POST for search (should be GET for cacheability)",
+      "Not returning total count so frontend can't build pagination UI",
+      "Allowing unbounded page_size leading to performance issues"
+    ],
+    "model_answer": "I'd use GET /api/users with query params: page, page_size, and optional filters like name, email, role. Response includes the user array plus metadata — total_count, current page, page_size, total_pages. I'd cap page_size at 100 and return 400 for invalid values. For very large datasets, cursor-based pagination with a 'next_cursor' token scales better than offset/limit.",
+    "generated": true
+  },
+  {
+    "id": "power_bi-001",
+    "topic": "power_bi",
+    "difficulty": "easy",
+    "type": "concept",
+    "text": "What is the difference between a calculated column and a measure in Power BI (DAX)?",
+    "key_points": [
+      "Calculated column: computed row-by-row at data refresh, stored in model",
+      "Measure: computed on-the-fly at query time based on filter context",
+      "Columns increase model size; measures don't",
+      "Use columns for row-level attributes; measures for aggregations",
+      "Measures respond to slicers/filters dynamically; columns don't"
+    ],
+    "common_mistakes": [
+      "Creating calculated columns for aggregations (use measures)",
+      "Not understanding filter context vs row context",
+      "Using columns when measures would be more efficient"
+    ],
+    "model_answer": "A calculated column is computed for every row when the data refreshes and stored in the model — like adding a 'Full Name' column. A measure is calculated at query time based on the current filter context — like 'Total Sales' which changes when you slice by region. Columns take up memory; measures don't. Use columns for row-level attributes, measures for anything aggregated.",
+    "generated": true
+  },
+  {
+    "id": "power_bi-002",
+    "topic": "power_bi",
+    "difficulty": "medium",
+    "type": "problem_solving",
+    "text": "You have a fact table with 10M rows and a dimension table with 500K rows. The report is slow. What DAX or modeling optimizations would you try?",
+    "key_points": [
+      "Remove unnecessary columns from both tables (reduce memory)",
+      "Use integer surrogate keys instead of string keys for relationships",
+      "Set appropriate data types (avoid high-precision decimals)",
+      "Create aggregations or summary tables for common queries",
+      "Use variables (VAR) in DAX to avoid repeated computation",
+      "Consider DirectQuery vs Import mode tradeoffs"
+    ],
+    "common_mistakes": [
+      "Adding indexes in DAX (not a thing — DAX isn't SQL)",
+      "Bi-directional filters causing ambiguity and performance hits",
+      "Not measuring with DAX Studio or Performance Analyzer first"
+    ],
+    "model_answer": "First, I'd profile with DAX Studio to find the slow measures. Then: drop unused columns, switch string keys to integer surrogates, use VAR in DAX to compute once and reuse. If specific visuals are slow, I'd create a pre-aggregated summary table at the grain those visuals need. Also check for bi-directional filters that might be causing the engine to do extra work. Import mode is usually faster than DirectQuery for this size.",
+    "generated": true
+  },
+  {
+    "id": "data_basics-001",
+    "topic": "data_basics",
+    "difficulty": "easy",
+    "type": "concept",
+    "text": "What is the difference between structured, semi-structured, and unstructured data?",
+    "key_points": [
+      "Structured: tabular, fixed schema (SQL tables, CSV)",
+      "Semi-structured: self-describing, flexible schema (JSON, XML, Parquet)",
+      "Unstructured: no predefined model (text, images, audio, video)",
+      "Structured is easiest to query; unstructured needs processing (NLP, CV)",
+      "Semi-structured sits in between — schema-on-read"
+    ],
+    "common_mistakes": [
+      "Calling CSV unstructured (it's structured)",
+      "Thinking JSON is unstructured (it's semi-structured)",
+      "Assuming unstructured data can't be analyzed"
+    ],
+    "model_answer": "Structured data has a fixed schema like database tables or CSV — rows and columns. Semi-structured data like JSON or Parquet has tags or keys that describe the data but the schema can vary per record. Unstructured data has no predefined format — think raw text, images, audio. Most analytics starts with structured; semi-structured is common in modern data lakes; unstructured needs NLP or computer vision to extract signals.",
+    "generated": true
+  },
+  {
+    "id": "data_basics-002",
+    "topic": "data_basics",
+    "difficulty": "medium",
+    "type": "problem_solving",
+    "text": "A stakeholder asks for a dashboard showing 'customer health score' but can't define it. How do you proceed?",
+    "key_points": [
+      "Ask clarifying questions: what behaviors indicate health? (usage, support tickets, NPS)",
+      "Propose a measurable definition: weighted composite of available metrics",
+      "Start simple: 2-3 key metrics, equal weights, iterate with feedback",
+      "Document assumptions and get sign-off before building",
+      "Plan for evolution: score will change as business learns"
+    ],
+    "common_mistakes": [
+      "Building without a definition (wasted effort)",
+      "Over-engineering with ML when simple rules work",
+      "Not involving the stakeholder in defining success"
+    ],
+    "model_answer": "I'd schedule a short meeting to understand what 'healthy' means to them — is it login frequency, feature adoption, low support tickets, high NPS? Then I'd propose a simple weighted score using 2-3 metrics we already track, like weekly active users and ticket count. We'd agree on weights, build a v1 dashboard, and iterate. The key is making the definition explicit and measurable so we can track whether the score actually predicts retention.",
+    "generated": true
+  },
+  {
+    "id": "behavioral-001",
+    "topic": "behavioral",
+    "difficulty": "easy",
+    "type": "behavioral",
+    "text": "Tell me about a time you had to learn a new tool or technology quickly for a project.",
+    "key_points": [
+      "Describes the situation and why the new tool was needed",
+      "Explains the learning approach (docs, tutorials, pair programming)",
+      "Shows application: how they used it to deliver results",
+      "Reflects on what worked and what they'd do differently",
+      "Demonstrates growth mindset and resourcefulness"
+    ],
+    "common_mistakes": [
+      "Vague answer without specific tool or outcome",
+      "Focusing only on learning, not on applying it",
+      "Not mentioning any challenges or how they overcame them"
+    ],
+    "model_answer": "In my capstone project, we needed to visualize geospatial data and I'd never used Folium. I spent a weekend going through the official docs and a few tutorial notebooks, then built a prototype map with our data. I hit an issue with coordinate reference systems, so I posted on Stack Overflow and got a fix within hours. The map became a key part of our final presentation. I learned that starting with a small end-to-end prototype beats reading everything first.",
+    "generated": true
+  },
+  {
+    "id": "behavioral-002",
+    "topic": "behavioral",
+    "difficulty": "medium",
+    "type": "behavioral",
+    "text": "Describe a situation where you received critical feedback. How did you respond?",
+    "key_points": [
+      "Describes the feedback objectively (not defensively)",
+      "Shows they listened and asked clarifying questions",
+      "Explains specific actions taken to improve",
+      "Shares the outcome or what they learned",
+      "Demonstrates emotional maturity and growth orientation"
+    ],
+    "common_mistakes": [
+      "Getting defensive or explaining why feedback was wrong",
+      "Vague response without concrete example",
+      "No follow-through or measurable change"
+    ],
+    "model_answer": "During my internship, my manager said my SQL queries were correct but hard for others to read — too many nested subqueries, no comments. I asked for an example of their preferred style, then rewrote my queries using CTEs and added inline comments explaining the business logic. My next code review was much smoother. I now default to CTEs and document assumptions upfront. That feedback made me a better collaborator, not just a better coder.",
+    "generated": true
   }
-}
+]

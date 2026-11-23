@@ -31,9 +31,24 @@ uvicorn app.main:app --reload --port 8000
 The API serves at `http://localhost:8000`. On first `/api/transcribe` call, `faster-whisper` will
 download its `base` model automatically (one-time, from Hugging Face).
 
-Config is environment-driven (see `backend/app/config.py`) — defaults assume Ollama at
+Config is environment-driven (see `backend/app/config.py`). By default it uses Ollama at
 `http://localhost:11434` with model `qwen3.5:9b`. Override with `OLLAMA_URL`, `OSCAR_MODEL_NAME`,
 `OSCAR_WHISPER_MODEL_SIZE` (`tiny`/`base`/`small`/`medium`), etc.
+
+To use Groq instead of Ollama (faster, cloud-based, no local GPU needed):
+
+```bash
+# In backend/.env (copy from .env.example)
+LLM_PROVIDER=groq
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+Available Groq models (set via `GROQ_FAST_MODEL` / `GROQ_GRADING_MODEL`):
+- `llama-3.1-8b-instant` (fast, for question generation)
+- `llama-3.3-70b-versatile` (stronger, for grading)
+- `gemma2-9b-it`, `mixtral-8x7b-32768` (alternatives)
+
+See `backend/.env.example` for all options.
 
 ## Frontend setup
 
@@ -89,7 +104,8 @@ backend/app/
   schemas.py       pydantic request/response models
   questions.py     curated question bank + LLM question generation
   personas.py      persona registry (tone prompts, follow-up thresholds)
-  ollama_client.py Ollama /api/chat wrapper
+  llm_client.py    unified LLM wrapper (Ollama + Groq)
+  ollama_client.py Ollama /api/chat wrapper (legacy, used by llm_client)
   grading.py       two-stage grading (score, then persona delivery)
   stt.py           faster-whisper transcription (soundfile decode, no ffmpeg)
   data/questions.json

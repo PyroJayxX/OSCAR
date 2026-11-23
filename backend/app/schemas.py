@@ -17,6 +17,10 @@ class PersonaOut(BaseModel):
 class QuestionOut(BaseModel):
     category: str
     question: str
+    difficulty: str | None = None
+    type: str | None = None
+    key_points: list[str] = []
+    common_mistakes: list[str] = []
 
 
 class GenerateQuestionIn(BaseModel):
@@ -32,6 +36,8 @@ class GradeIn(BaseModel):
     persona: str
     question: str
     answer_text: str
+    key_points: list[str] = []
+    common_mistakes: list[str] = []
 
 
 class AttemptSummary(BaseModel):
@@ -41,6 +47,8 @@ class AttemptSummary(BaseModel):
     persona: str
     question: str
     score: int
+    knowledge_score: Optional[int] = None
+    response_score: Optional[int] = None
 
 
 class AttemptDetail(AttemptSummary):
@@ -50,3 +58,4 @@ class AttemptDetail(AttemptSummary):
     suggestions: list[str]
     feedback: str
     follow_up_question: Optional[str] = None
+    model_answer: Optional[str] = None

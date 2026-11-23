@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from app import db, grading, personas, questions, stt
-from app.config import CORS_ORIGINS
+from app.config import CORS_ORIGINS, GROQ_API_KEY, LLM_PROVIDER
 from app.schemas import (
     AttemptDetail,
     AttemptSummary,
@@ -23,6 +23,9 @@ from app.schemas import (
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     db.init_db()
+    # Validate Groq configuration at startup
+    if LLM_PROVIDER == "groq" and not GROQ_API_KEY:
+        raise RuntimeError("LLM_PROVIDER=groq but GROQ_API_KEY is not set. Set GROQ_API_KEY in environment or .env file.")
     yield
 
 
@@ -47,18 +50,28 @@ def get_personas():
 
 
 @app.get("/api/question", response_model=QuestionOut)
-def get_question(category: str):
+def get_question(category: str, session_id: str = "default"):
     if not questions.is_valid_category(category):
         raise HTTPException(status_code=404, detail="Unknown category")
-    return {"category": category, "question": questions.random_question(category)}
+    q = questions.get_question_details(category, session_id)
+    if q is None:
+        raise HTTPException(status_code=404, detail="No more questions in this category for this session")
+    return {
+        "category": category,
+        "question": q["text"],
+        "difficulty": q.get("difficulty"),
+        "type": q.get("type"),
+        "key_points": q.get("key_points", []),
+        "common_mistakes": q.get("common_mistakes", []),
+    }
 
 
 @app.post("/api/question/generate", response_model=QuestionOut)
-def post_generate_question(body: GenerateQuestionIn):
+async def post_generate_question(body: GenerateQuestionIn):
     if not questions.is_valid_category(body.category):
         raise HTTPException(status_code=404, detail="Unknown category")
-    question = questions.generate_question(body.category)
-    return {"category": body.category, "question": question}
+    question = await questions.generate_question(body.category)
+    return {"category": body.category, "question": question, "difficulty": None, "type": None, "key_points": [], "common_mistakes": []}
 
 
 @app.post("/api/transcribe", response_model=TranscribeOut)
@@ -81,13 +94,25 @@ async def post_grade(body: GradeIn):
     if not body.answer_text.strip():
         raise HTTPException(status_code=400, detail="Answer text is empty")
 
+    # Get question details (key_points, common_mistakes) if not provided
+    q_details = questions.get_question_details(body.category)
+    if q_details is None:
+        raise HTTPException(status_code=404, detail="No more questions in this category for this session")
+    key_points = body.key_points if body.key_points else q_details.get("key_points", [])
+    common_mistakes = body.common_mistakes if body.common_mistakes else q_details.get("common_mistakes", [])
+
     async def event_stream():
         try:
             yield _ndjson({"type": "stage", "stage": "scoring"})
-            score_result = await run_in_threadpool(
-                grading.grade_score, body.question, body.answer_text
+            score_result = await grading.grade_score(
+                body.question, body.answer_text, key_points, common_mistakes
             )
-            yield _ndjson({"type": "score", "score": score_result["score"]})
+            # New two-track scores event
+            yield _ndjson({
+                "type": "scores",
+                "knowledge_score": score_result["knowledge_score"],
+                "response_score": score_result["response_score"],
+            })
 
             yield _ndjson({"type": "stage", "stage": "speaking"})
             feedback_parts: list[str] = []
@@ -105,11 +130,14 @@ async def post_grade(body: GradeIn):
                 question=body.question,
                 answer_text=body.answer_text,
                 score=score_result["score"],
+                knowledge_score=score_result["knowledge_score"],
+                response_score=score_result["response_score"],
                 strengths=score_result["strengths"],
-                gaps=score_result["gaps"],
+                gaps=score_result["missed_points"],  # gaps = missed_points for compat
                 suggestions=score_result["suggestions"],
                 feedback=feedback,
                 follow_up_question=None,
+                model_answer=score_result["model_answer"],
             )
             yield _ndjson({"type": "done", "id": attempt_id})
         except Exception as exc:  # noqa: BLE001 - surface any failure to the client
