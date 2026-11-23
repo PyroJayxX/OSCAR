@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import { api, type AttemptSummary, type Category, type Persona } from "./api/client";
-import { Waveform } from "./components/Waveform";
+import { Waveform, SimulateToggle } from "./components/Waveform";
 
 function App() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -37,13 +37,14 @@ function App() {
   const [recorderError, setRecorderError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
   const durationIntervalRef = useRef<number | null>(null);
 
   // Floating menu state for mobile
   const [showPersonaMenu, setShowPersonaMenu] = useState(false);
   const [showTopicMenu, setShowTopicMenu] = useState(false);
+
+  // Dev-only simulate speaking
+  const [simulateSpeaking, setSimulateSpeaking] = useState(false);
 
   useEffect(() => {
     api.getCategories().then(setCategories).catch((e) => setErrorMessage(e.message));
@@ -122,11 +123,6 @@ function App() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioContextRef.current = new AudioContext();
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      analyserRef.current.fftSize = 2048;
-      source.connect(analyserRef.current);
 
       mediaRecorderRef.current = new MediaRecorder(stream);
       audioChunksRef.current = [];
@@ -153,7 +149,6 @@ function App() {
       }
       mediaRecorderRef.current.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: "audio/wav" });
-        if (audioContextRef.current) audioContextRef.current.close();
         if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
         mediaRecorderRef.current!.stream.getTracks().forEach((t) => t.stop());
         setRecorderStatus("idle");
@@ -335,13 +330,13 @@ function App() {
 
           {!hasSetup ? (
             <div className="stage-empty">
-              <Waveform mode="ambient" className="hero-blob" />
+              <Waveform mode="idle" className="hero-blob" />
               <p className="text-secondary">Pick a topic and an interviewer to begin.</p>
             </div>
           ) : (hasSetup && !question ? (
             <>
               <div className="stage-empty">
-                <Waveform mode="ambient" className="hero-blob" />
+                <Waveform mode="idle" className="hero-blob" />
                 <p className="text-secondary">Loading your first question…</p>
               </div>
             </>
@@ -350,9 +345,10 @@ function App() {
               {/* Blob visualizer */}
               <div className="blob-wrapper">
                 <Waveform
-                  mode={gradeStage === "speaking" ? "ambient" : gradeStage === "scoring" ? "live" : "flat"}
-                  getAnalyser={() => analyserRef.current}
+                  mode={recorderStatus === "recording" || gradeStage === "speaking" || gradeStage === "scoring" ? "active" : "idle"}
                   className="hero-blob"
+                  simulateSpeaking={simulateSpeaking}
+                  color={simulateSpeaking ? "#378ADD" : undefined}
                 />
               </div>
 
@@ -395,6 +391,9 @@ function App() {
                     </span>
                     {recorderError && <span className="field-error">{recorderError}</span>}
                     {transcribeError && <span className="field-error">{transcribeError}</span>}
+                    {import.meta.env.DEV && (
+                      <SimulateToggle onChange={setSimulateSpeaking} />
+                    )}
                   </div>
                 )}
 

@@ -1,117 +1,345 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { MutableRefObject } from "react";
 
-type WaveformMode = "flat" | "live" | "ambient";
+// ─── Constants (tweak these) ────────────────────────────────────────────────
+const POINT_COUNT = 10;
+const RADIUS_RATIO = 1.3; // base radius as a fraction of the canvas size
+const MAX_DISTORTION_RATIO = 2.0; // how far loud audio can push a point (fraction of its radius)
+const IDLE_TARGET = 0.02;
+const LOUDNESS_GAIN = 0.8; // how much loudness adds on top of the idle target
+const SMOOTHING_ACTIVE = 0.16;
+const SMOOTHING_IDLE = 0.07;
+const FILL_ALPHA = 0.2;
+const NOISE_SPEED = 1.8; // how fast the blob morphs
+const REDUCED_MOTION_FACTOR = 0.4; // movement kept when the OS asks for reduced motion
+const DEFAULT_COLOR = "#378ADD";
+
+// Blob layers: scale, lineWidth, strokeAlpha, phaseShift, hasFill
+const LAYERS = [
+  { scale: 1.0, lineWidth: 2.5, strokeAlpha: 1.0, phaseShift: 0.0, hasFill: false },
+  { scale: 1.05, lineWidth: 1.5, strokeAlpha: 0.45, phaseShift: 2.1, hasFill: false },
+  { scale: 0.95, lineWidth: 1.2, strokeAlpha: 0.3, phaseShift: 4.2, hasFill: true },
+];
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+type WaveformMode = "idle" | "active";
 
 interface WaveformProps {
   mode: WaveformMode;
-  getAnalyser?: () => AnalyserNode | null;
-  className?: string;
+  loudness?: number; // 0–1, when provided it overrides the mic and the simulation
+  color?: string; // default #378ADD
+  className?: string; // applied to the wrapper div
+  simulateSpeaking?: boolean; // dev-only: fake loudness envelope
+  debug?: boolean; // draws loudness/amp numbers on the canvas
 }
 
-const REDUCED_MOTION =
-  typeof window !== "undefined" &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-const TEAL: [number, number, number] = [79, 209, 197];
-const AMBER: [number, number, number] = [255, 159, 28];
-
-function lerpColor(a: [number, number, number], b: [number, number, number], t: number, alpha: number) {
-  const r = Math.round(a[0] + (b[0] - a[0]) * t);
-  const g = Math.round(a[1] + (b[1] - a[1]) * t);
-  const bl = Math.round(a[2] + (b[2] - a[2]) * t);
-  return `rgba(${r}, ${g}, ${bl}, ${alpha})`;
+interface ControlPoint {
+  angle: number;
+  freq1: number;
+  phase1: number;
+  amp1: number;
+  freq2: number;
+  phase2: number;
+  amp2: number;
+  freq3: number;
+  phase3: number;
+  amp3: number;
 }
 
-const RING_COUNT = 7;
+// ─── Noise helpers ──────────────────────────────────────────────────────────
+function rand(s: number): number {
+  const x = Math.sin(s) * 10000;
+  return x - Math.floor(x);
+}
 
-export function Waveform({ mode, getAnalyser, className }: WaveformProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const frameRef = useRef<number | null>(null);
-  const energyRef = useRef(0);
+function makePoint(angle: number, seed: number): ControlPoint {
+  return {
+    angle,
+    freq1: 0.5 + rand(seed + 1) * 1.5,
+    phase1: rand(seed + 2) * Math.PI * 2,
+    amp1: 0.3 + rand(seed + 3) * 0.4,
+    freq2: 1.5 + rand(seed + 4) * 2.0,
+    phase2: rand(seed + 5) * Math.PI * 2,
+    amp2: 0.15 + rand(seed + 6) * 0.25,
+    freq3: 3.0 + rand(seed + 7) * 3.0,
+    phase3: rand(seed + 8) * Math.PI * 2,
+    amp3: 0.05 + rand(seed + 9) * 0.15,
+  };
+}
+
+function pointRadius(pt: ControlPoint, t: number, distortion: number, baseR: number): number {
+  const noise =
+    Math.sin(t * pt.freq1 + pt.phase1) * pt.amp1 +
+    Math.sin(t * pt.freq2 + pt.phase2) * pt.amp2 +
+    Math.sin(t * pt.freq3 + pt.phase3) * pt.amp3;
+  const clamped = Math.max(-1, Math.min(1, noise));
+  return baseR * (1 + clamped * distortion * MAX_DISTORTION_RATIO);
+}
+
+function parseColor(hex: string): [number, number, number] {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return [isNaN(r) ? 55 : r, isNaN(g) ? 138 : g, isNaN(b) ? 221 : b];
+}
+
+// ─── Loudness hooks (write to a ref, so no re-render every frame) ───────────
+function useMicLoudness(source: MediaStream | null): MutableRefObject<number> {
+  const loudnessRef = useRef(0);
 
   useEffect(() => {
+    loudnessRef.current = 0;
+    if (!source) return;
+
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    const ctx = new AudioCtx();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.3;
+    const data = new Uint8Array(analyser.fftSize);
+
+    const src = ctx.createMediaStreamSource(source);
+    // IMPORTANT: never connect the mic to ctx.destination (it would play through the speakers)
+    src.connect(analyser);
+
+    let raf = 0;
+    const tick = () => {
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = data[i] / 128 - 1;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / data.length);
+      loudnessRef.current = Math.min(1, rms * 3);
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      src.disconnect();
+      ctx.close();
+      loudnessRef.current = 0;
+    };
+  }, [source]);
+
+  return loudnessRef;
+}
+
+function useSimulatedLoudness(enabled: boolean): MutableRefObject<number> {
+  const loudnessRef = useRef(0);
+
+  useEffect(() => {
+    if (!enabled) {
+      loudnessRef.current = 0;
+      return;
+    }
+    let raf = 0;
+    const tick = (time: number) => {
+      const t = time * 0.001;
+      const base = 0.45 + Math.sin(t * 0.7) * 0.2 + Math.sin(t * 1.3) * 0.15;
+      const burst = Math.max(0, Math.sin(t * 4.7) * Math.sin(t * 23) * 0.5);
+      const target = Math.min(1, base + burst);
+      loudnessRef.current += (target - loudnessRef.current) * 0.12;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      loudnessRef.current = 0;
+    };
+  }, [enabled]);
+
+  return loudnessRef;
+}
+
+// ─── Main blob component ────────────────────────────────────────────────────
+export function Waveform({
+  mode,
+  loudness: loudnessProp,
+  color = DEFAULT_COLOR,
+  className,
+  simulateSpeaking = false,
+  debug = false,
+}: WaveformProps) {
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [size, setSize] = useState(0); // square canvas size in CSS px
+  const [points] = useState<ControlPoint[]>(() =>
+    Array.from({ length: POINT_COUNT }, (_, i) => makePoint((i / POINT_COUNT) * Math.PI * 2, i * 1000))
+  );
+
+  // Microphone
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const micLoudness = useMicLoudness(micStream);
+  const simLoudness = useSimulatedLoudness(simulateSpeaking);
+
+  const isActive = mode === "active" || simulateSpeaking;
+
+  // The animation loop reads the latest values from this ref,
+  // so the loop itself never has to restart when props change.
+  const liveRef = useRef({ isActive, loudnessProp, simulateSpeaking, color, debug });
+  liveRef.current = { isActive, loudnessProp, simulateSpeaking, color, debug };
+
+  // Keep the canvas a true square that fits the wrapper (no stretching)
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const update = () => {
+      const r = wrap.getBoundingClientRect();
+      const h = r.height || r.width;
+      setSize(Math.max(0, Math.floor(Math.min(r.width, h))));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, []);
+
+  // Open the mic only while active (and not simulating)
+  useEffect(() => {
+    let cancelled = false;
+    if (mode === "active" && !simulateSpeaking) {
+      navigator.mediaDevices
+        .getUserMedia({ audio: true })
+        .then((stream) => {
+          if (cancelled) {
+            stream.getTracks().forEach((t) => t.stop());
+            return;
+          }
+          micStreamRef.current = stream;
+          setMicStream(stream);
+        })
+        .catch(console.error);
+    }
+    return () => {
+      cancelled = true;
+      micStreamRef.current?.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
+      setMicStream(null);
+    };
+  }, [mode, simulateSpeaking]);
+
+  // Animation loop (restarts only when the canvas size changes)
+  useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || size <= 0) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const size = Math.min(canvas.clientWidth, canvas.clientHeight);
-    canvas.width = canvas.clientWidth * dpr;
-    canvas.height = canvas.clientHeight * dpr;
-    ctx.scale(dpr, dpr);
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
 
-    const cx = canvas.clientWidth / 2;
-    const cy = canvas.clientHeight / 2;
-    const baseRadius = size * 0.26;
-    const buffer = new Uint8Array(1024);
+    const cx = size / 2;
+    const cy = size / 2;
+    const baseR = size * RADIUS_RATIO;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const motionFactor = reduced ? REDUCED_MOTION_FACTOR : 1;
 
-    const targetEnergy = () => {
-      if (mode === "live") {
-        const analyser = getAnalyser?.();
-        if (!analyser) return 0;
-        analyser.getByteTimeDomainData(buffer);
-        let sum = 0;
-        for (let i = 0; i < buffer.length; i++) {
-          const v = buffer[i] / 128 - 1;
-          sum += v * v;
+    let amp = IDLE_TARGET;
+    let raf = 0;
+
+    const render = (ts: number) => {
+      const live = liveRef.current;
+      const loud =
+        live.loudnessProp ?? (live.simulateSpeaking ? simLoudness.current : micLoudness.current);
+
+      const target = live.isActive ? IDLE_TARGET + loud * LOUDNESS_GAIN : IDLE_TARGET;
+      const k = live.isActive && loud > IDLE_TARGET * 1.5 ? SMOOTHING_ACTIVE : SMOOTHING_IDLE;
+      amp += (target - amp) * k;
+
+      // Always a little distortion, so idle still drifts very slightly
+      const distortion = amp * motionFactor;
+      const t = ts * 0.001 * NOISE_SPEED;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, size, size);
+
+      const [r, g, b] = parseColor(live.color);
+
+      LAYERS.forEach((layer) => {
+        const pts = points.map((pt) => {
+          const radius = pointRadius(pt, t + layer.phaseShift, distortion, baseR * layer.scale);
+          return { x: cx + Math.cos(pt.angle) * radius, y: cy + Math.sin(pt.angle) * radius };
+        });
+
+        ctx.beginPath();
+        const first = pts[0];
+        const last = pts[pts.length - 1];
+        ctx.moveTo((first.x + last.x) / 2, (first.y + last.y) / 2);
+        for (let i = 0; i < pts.length; i++) {
+          const curr = pts[i];
+          const next = pts[(i + 1) % pts.length];
+          ctx.quadraticCurveTo(curr.x, curr.y, (curr.x + next.x) / 2, (curr.y + next.y) / 2);
         }
-        return Math.min(1, Math.sqrt(sum / buffer.length) * 5);
+        ctx.closePath();
+
+        if (layer.hasFill) {
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${FILL_ALPHA})`;
+          ctx.fill();
+        }
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${layer.strokeAlpha})`;
+        ctx.lineWidth = layer.lineWidth;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.stroke();
+      });
+
+      if (live.debug) {
+        ctx.fillStyle = "rgba(128,128,128,0.9)";
+        ctx.font = "12px monospace";
+        ctx.fillText(`loud ${loud.toFixed(2)}  amp ${amp.toFixed(2)}`, 8, 16);
       }
-      if (mode === "ambient") return 0.55;
-      return 0.12;
+
+      raf = requestAnimationFrame(render);
     };
 
-    const drawRing = (ringIndex: number, t: number, energy: number) => {
-      const freq = 2.5 + ringIndex * 0.7;
-      const amp = baseRadius * (0.22 + energy * 0.55) * (1 - (ringIndex / RING_COUNT) * 0.3);
-      const phase = ringIndex * 1.1;
-      const speed = 0.8 + ringIndex * 0.12;
-      const hueT = ringIndex / (RING_COUNT - 1);
-      const alpha = mode === "flat" ? 0.18 : 0.32 + (1 - hueT) * 0.28;
+    raf = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(raf);
+  }, [size, points, simLoudness, micLoudness]);
 
-      ctx.beginPath();
-      const step = 0.06;
-      for (let a = 0; a <= Math.PI * 2 + step; a += step) {
-        const r =
-          baseRadius +
-          Math.sin(a * freq + t * speed + phase) * amp +
-          Math.sin(a * (freq * 0.5) - t * speed * 1.3) * amp * 0.5;
-        const x = cx + Math.cos(a) * r;
-        const y = cy + Math.sin(a) * r;
-        if (a === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      const color = lerpColor(TEAL, AMBER, hueT, alpha);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.4;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = mode === "flat" ? 3 : 9;
-      ctx.stroke();
-    };
+  return (
+    <div
+      ref={wrapRef}
+      className={`blob-wrap ${className ?? ""}`}
+      style={{
+        width: "100%",
+        height: "100%",
+        minHeight: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <canvas
+        ref={canvasRef}
+        className="blob-canvas"
+        style={{ width: size, height: size, display: "block" }}
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
 
-    const render = (t: number) => {
-      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-      const target = targetEnergy();
-      energyRef.current += (target - energyRef.current) * 0.08;
-      for (let r = 0; r < RING_COUNT; r++) drawRing(r, t, energyRef.current);
-      ctx.shadowBlur = 0;
-
-      // Only the purely decorative resting state honors reduced-motion by
-      // freezing; live/ambient are functional activity indicators (recording,
-      // processing) and must keep animating regardless.
-      if (mode !== "flat" || !REDUCED_MOTION) {
-        frameRef.current = requestAnimationFrame((next) => render(next * 0.0024));
-      }
-    };
-
-    render(0);
-
-    return () => {
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-    };
-  }, [mode, getAnalyser]);
-
-  return <canvas ref={canvasRef} className={`waveform-canvas ${className ?? ""}`} />;
+// ─── Dev-only toggle component ──────────────────────────────────────────────
+export function SimulateToggle({ onChange }: { onChange: (v: boolean) => void }) {
+  const [enabled, setEnabled] = useState(false);
+  return (
+    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" }}>
+      <input
+        type="checkbox"
+        checked={enabled}
+        onChange={(e) => {
+          setEnabled(e.target.checked);
+          onChange(e.target.checked);
+        }}
+      />
+      <span>Simulate speaking (dev)</span>
+    </label>
+  );
 }
