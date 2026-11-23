@@ -14,11 +14,15 @@ export interface Persona {
 export interface Question {
   category: string;
   question: string;
+  difficulty?: string | null;
+  type?: string | null;
+  key_points: string[];
+  common_mistakes: string[];
 }
 
 export type GradeStreamEvent =
   | { type: "stage"; stage: "scoring" | "speaking" }
-  | { type: "score"; score: number }
+  | { type: "scores"; knowledge_score: number; response_score: number }
   | { type: "token"; text: string }
   | { type: "done"; id: number }
   | { type: "error"; message: string };
@@ -30,6 +34,8 @@ export interface AttemptSummary {
   persona: string;
   question: string;
   score: number;
+  knowledge_score: number | null;
+  response_score: number | null;
 }
 
 export interface AttemptDetail extends AttemptSummary {
@@ -39,6 +45,7 @@ export interface AttemptDetail extends AttemptSummary {
   suggestions: string[];
   feedback: string;
   follow_up_question: string | null;
+  model_answer: string | null;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -83,7 +90,7 @@ export const api = {
   },
 
   gradeStream: async (
-    params: { category: string; persona: string; question: string; answer_text: string },
+    params: { category: string; persona: string; question: string; answer_text: string; key_points: string[]; common_mistakes: string[] },
     onEvent: (event: GradeStreamEvent) => void,
   ): Promise<void> => {
     const res = await fetch(`${BASE_URL}/api/grade`, {

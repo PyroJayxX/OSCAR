@@ -2,15 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 
 // ─── Constants (tweak these) ────────────────────────────────────────────────
-const POINT_COUNT = 10;
-const RADIUS_RATIO = 1.3; // base radius as a fraction of the canvas size
-const MAX_DISTORTION_RATIO = 2.0; // how far loud audio can push a point (fraction of its radius)
+const POINT_COUNT = 16; // more lobes = spikier shape
+const RADIUS_RATIO = 0.2; // base radius as a fraction of the canvas size
+const MAX_DISTORTION_RATIO = 0.9; // how far loud audio can push a point (fraction of its radius)
 const IDLE_TARGET = 0.02;
-const LOUDNESS_GAIN = 0.8; // how much loudness adds on top of the idle target
-const SMOOTHING_ACTIVE = 0.16;
-const SMOOTHING_IDLE = 0.07;
+const LOUDNESS_GAIN = 1.4; // how much loudness adds on top of the idle target
+const ATTACK = 0.4; // how fast the blob snaps up when audio gets louder
+const RELEASE = 0.1; // how fast it settles back down
 const FILL_ALPHA = 0.2;
-const NOISE_SPEED = 1.8; // how fast the blob morphs
+const NOISE_SPEED = 1.5; // how fast the blob morphs
+const DEFAULT_CYCLE_MS = 4000; // time spent fading from one palette color to the next
 const REDUCED_MOTION_FACTOR = 0.4; // movement kept when the OS asks for reduced motion
 const DEFAULT_COLOR = "#378ADD";
 
@@ -27,7 +28,8 @@ type WaveformMode = "idle" | "active";
 interface WaveformProps {
   mode: WaveformMode;
   loudness?: number; // 0–1, when provided it overrides the mic and the simulation
-  color?: string; // default #378ADD
+  color?: string | string[]; // one color, or a palette that cycles. default #378ADD
+  colorCycleMs?: number; // ms per color transition when color is an array (default 4000)
   className?: string; // applied to the wrapper div
   simulateSpeaking?: boolean; // dev-only: fake loudness envelope
   debug?: boolean; // draws loudness/amp numbers on the canvas
@@ -61,9 +63,9 @@ function makePoint(angle: number, seed: number): ControlPoint {
     freq2: 1.5 + rand(seed + 4) * 2.0,
     phase2: rand(seed + 5) * Math.PI * 2,
     amp2: 0.15 + rand(seed + 6) * 0.25,
-    freq3: 3.0 + rand(seed + 7) * 3.0,
+    freq3: 4.0 + rand(seed + 7) * 6.0, // high-frequency flicker on the edge
     phase3: rand(seed + 8) * Math.PI * 2,
-    amp3: 0.05 + rand(seed + 9) * 0.15,
+    amp3: 0.1 + rand(seed + 9) * 0.25,
   };
 }
 
@@ -83,6 +85,26 @@ function parseColor(hex: string): [number, number, number] {
   const g = parseInt(full.slice(2, 4), 16);
   const b = parseInt(full.slice(4, 6), 16);
   return [isNaN(r) ? 55 : r, isNaN(g) ? 138 : g, isNaN(b) ? 221 : b];
+}
+
+// Pick the current color. A single color is used as-is; a palette fades smoothly
+// from one entry to the next and loops forever.
+function colorAt(color: string | string[], ts: number, cycleMs: number): [number, number, number] {
+  const palette = Array.isArray(color) ? color : [color];
+  if (palette.length === 0) return parseColor(DEFAULT_COLOR);
+  if (palette.length === 1) return parseColor(palette[0]);
+
+  const pos = (ts / cycleMs) % palette.length;
+  const i = Math.floor(pos);
+  const f = pos - i;
+  const eased = f * f * (3 - 2 * f); // smoothstep, so the fade lingers on each color
+  const a = parseColor(palette[i]);
+  const b = parseColor(palette[(i + 1) % palette.length]);
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * eased),
+    Math.round(a[1] + (b[1] - a[1]) * eased),
+    Math.round(a[2] + (b[2] - a[2]) * eased),
+  ];
 }
 
 // ─── Loudness hooks (write to a ref, so no re-render every frame) ───────────
@@ -113,7 +135,7 @@ function useMicLoudness(source: MediaStream | null): MutableRefObject<number> {
         sum += v * v;
       }
       const rms = Math.sqrt(sum / data.length);
-      loudnessRef.current = Math.min(1, rms * 3);
+      loudnessRef.current = Math.min(1, rms * 5); // speech RMS is usually only 0.05–0.2
       raf = requestAnimationFrame(tick);
     };
     tick();
@@ -161,6 +183,7 @@ export function Waveform({
   mode,
   loudness: loudnessProp,
   color = DEFAULT_COLOR,
+  colorCycleMs = DEFAULT_CYCLE_MS,
   className,
   simulateSpeaking = false,
   debug = false,
@@ -182,8 +205,8 @@ export function Waveform({
 
   // The animation loop reads the latest values from this ref,
   // so the loop itself never has to restart when props change.
-  const liveRef = useRef({ isActive, loudnessProp, simulateSpeaking, color, debug });
-  liveRef.current = { isActive, loudnessProp, simulateSpeaking, color, debug };
+  const liveRef = useRef({ isActive, loudnessProp, simulateSpeaking, color, colorCycleMs, debug });
+  liveRef.current = { isActive, loudnessProp, simulateSpeaking, color, colorCycleMs, debug };
 
   // Keep the canvas a true square that fits the wrapper (no stretching)
   useEffect(() => {
@@ -249,8 +272,10 @@ export function Waveform({
       const loud =
         live.loudnessProp ?? (live.simulateSpeaking ? simLoudness.current : micLoudness.current);
 
-      const target = live.isActive ? IDLE_TARGET + loud * LOUDNESS_GAIN : IDLE_TARGET;
-      const k = live.isActive && loud > IDLE_TARGET * 1.5 ? SMOOTHING_ACTIVE : SMOOTHING_IDLE;
+      // Clamped so the blob can never grow past the canvas edge
+      const target = live.isActive ? Math.min(1, IDLE_TARGET + loud * LOUDNESS_GAIN) : IDLE_TARGET;
+      // Snap up fast, decay slower
+      const k = target > amp ? ATTACK : RELEASE;
       amp += (target - amp) * k;
 
       // Always a little distortion, so idle still drifts very slightly
@@ -260,7 +285,7 @@ export function Waveform({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, size, size);
 
-      const [r, g, b] = parseColor(live.color);
+      const [r, g, b] = colorAt(live.color, ts, live.colorCycleMs);
 
       LAYERS.forEach((layer) => {
         const pts = points.map((pt) => {

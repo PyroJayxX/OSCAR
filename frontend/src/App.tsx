@@ -10,6 +10,10 @@ function App() {
   const [selectedPersona, setSelectedPersona] = useState<string | null>(null);
 
   const [question, setQuestion] = useState<string>("");
+  const [questionKeyPoints, setQuestionKeyPoints] = useState<string[]>([]);
+  const [questionCommonMistakes, setQuestionCommonMistakes] = useState<string[]>([]);
+  const [questionDifficulty, setQuestionDifficulty] = useState<string | null>(null);
+  const [questionType, setQuestionType] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const hasSetup = selectedCategory && selectedPersona;
@@ -17,6 +21,8 @@ function App() {
   const [gradeStage, setGradeStage] = useState<"scoring" | "speaking" | "done" | "error" | "idle">("idle");
   const [narrativeText, setNarrativeText] = useState("");
   const [lastAnswerText, setLastAnswerText] = useState("");
+  const [_knowledgeScore, setKnowledgeScore] = useState<number | null>(null);
+  const [_responseScore, setResponseScore] = useState<number | null>(null);
 
   const [showHistory, setShowHistory] = useState(false);
   const [historyAttempts, setHistoryAttempts] = useState<AttemptSummary[]>([]);
@@ -70,8 +76,23 @@ function App() {
     try {
       const result = await api.getQuestion(category);
       setQuestion(result.question);
+      setQuestionKeyPoints(result.key_points || []);
+      setQuestionCommonMistakes(result.common_mistakes || []);
+      // Store difficulty and type for display
+      setQuestionDifficulty(result.difficulty || null);
+      setQuestionType(result.type || null);
     } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : "Could not load a question");
+      // Handle "no more questions" case
+      if (e instanceof Error && e.message.includes("No more questions")) {
+        setErrorMessage("You've completed all questions in this category for this session!");
+      } else {
+        setErrorMessage(e instanceof Error ? e.message : "Could not load a question");
+      }
+      setQuestion("");
+      setQuestionKeyPoints([]);
+      setQuestionCommonMistakes([]);
+      setQuestionDifficulty(null);
+      setQuestionType(null);
     }
   };
 
@@ -80,13 +101,26 @@ function App() {
     setLastAnswerText(answerText);
     setGradeStage("scoring");
     setNarrativeText("");
+    setKnowledgeScore(null);
+    setResponseScore(null);
     // Add user's answer to transcript
     setTranscriptLines((prev) => [...prev.slice(-3), { text: answerText, isUser: true }]);
     try {
       await api.gradeStream(
-        { category: selectedCategory, persona: selectedPersona, question, answer_text: answerText },
+        {
+          category: selectedCategory,
+          persona: selectedPersona,
+          question,
+          answer_text: answerText,
+          key_points: questionKeyPoints,
+          common_mistakes: questionCommonMistakes,
+        },
         (event) => {
           if (event.type === "stage") setGradeStage(event.stage);
+          else if (event.type === "scores") {
+            setKnowledgeScore(event.knowledge_score);
+            setResponseScore(event.response_score);
+          }
           else if (event.type === "token") setNarrativeText((t) => t + event.text);
           else if (event.type === "done") setGradeStage("done");
           else if (event.type === "error") {
@@ -103,6 +137,8 @@ function App() {
     setGradeStage("idle");
     setNarrativeText("");
     setLastAnswerText("");
+    setKnowledgeScore(null);
+    setResponseScore(null);
     if (selectedCategory) await fetchQuestion(selectedCategory);
   };
 
@@ -208,9 +244,19 @@ function App() {
               )}
               {historyAttempts.map((a) => (
                 <button key={a.id} className="history-row" onClick={() => {}} role="listitem">
-                  <span className="history-row-score mono" style={{ color: a.score >= 75 ? "var(--signal-sage)" : a.score >= 50 ? "var(--signal-amber)" : "var(--signal-rose)" }}>
-                    {a.score}
-                  </span>
+                  <div className="history-row-scores">
+                    <span className="history-row-score mono" style={{ color: (a.knowledge_score ?? 0) >= 7.5 ? "var(--signal-sage)" : (a.knowledge_score ?? 0) >= 5 ? "var(--signal-amber)" : "var(--signal-rose)" }}>
+                      K: {a.knowledge_score ?? "—"}/10
+                    </span>
+                    <span className="history-row-score mono" style={{ color: (a.response_score ?? 0) >= 7.5 ? "var(--signal-sage)" : (a.response_score ?? 0) >= 5 ? "var(--signal-amber)" : "var(--signal-rose)" }}>
+                      R: {a.response_score ?? "—"}/10
+                    </span>
+                    {a.score && (
+                      <span className="history-row-score mono" style={{ color: a.score >= 75 ? "var(--signal-sage)" : a.score >= 50 ? "var(--signal-amber)" : "var(--signal-rose)" }}>
+                        {a.score}
+                      </span>
+                    )}
+                  </div>
                   <div className="history-row-body">
                     <div className="history-row-question">{a.question}</div>
                     <div className="history-row-meta mono">
@@ -330,13 +376,17 @@ function App() {
 
           {!hasSetup ? (
             <div className="stage-empty">
-              <Waveform mode="idle" className="hero-blob" />
+              <div className="blob-wrapper">
+                <Waveform mode="idle" />
+              </div>
               <p className="text-secondary">Pick a topic and an interviewer to begin.</p>
             </div>
           ) : (hasSetup && !question ? (
             <>
               <div className="stage-empty">
-                <Waveform mode="idle" className="hero-blob" />
+                <div className="blob-wrapper">
+                  <Waveform mode="idle" />
+                </div>
                 <p className="text-secondary">Loading your first question…</p>
               </div>
             </>
@@ -346,7 +396,6 @@ function App() {
               <div className="blob-wrapper">
                 <Waveform
                   mode={recorderStatus === "recording" || gradeStage === "speaking" || gradeStage === "scoring" ? "active" : "idle"}
-                  className="hero-blob"
                   simulateSpeaking={simulateSpeaking}
                   color={simulateSpeaking ? "#378ADD" : undefined}
                 />
@@ -365,6 +414,27 @@ function App() {
                     <span className="transcript-prefix">OSCAR</span>
                     <span className="transcript-text">{narrativeText}</span>
                     <span className="transcript-cursor" aria-hidden="true"></span>
+                  </div>
+                )}
+                {/* Show current question with difficulty/type labels */}
+                {question && gradeStage === "idle" && (
+                  <div className="transcript-line current-question">
+                    <span className="transcript-prefix">Question</span>
+                    <span className="transcript-text">{question}</span>
+                    {(questionDifficulty || questionType) && (
+                      <div className="question-meta">
+                        {questionDifficulty && (
+                          <span className={`question-badge ${questionDifficulty.toLowerCase()}`}>
+                            {questionDifficulty}
+                          </span>
+                        )}
+                        {questionType && (
+                          <span className="question-badge type">
+                            {questionType.replace("_", " ")}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -339,12 +339,13 @@
 /* ---------- Hero blob ---------- */
 
 .blob-wrapper {
-  width: 100%;
+  width: min(70vw, 45vh);
   max-width: 380px;
-  aspect-ratio: 1;
+  aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .hero-blob {
@@ -362,6 +363,7 @@
   }
 
   .blob-wrapper {
+    width: min(85vw, 35vh);
     max-width: 280px;
   }
 
@@ -730,6 +732,60 @@
   line-height: 1.35;
   color: var(--text-primary);
   text-align: center;
+}
+
+/* ---------- Current question with badges ---------- */
+
+.current-question {
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-2);
+}
+
+.question-meta {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.question-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  border: 1px solid var(--line);
+  color: var(--text-secondary);
+}
+
+.question-badge.easy {
+  background: rgba(79, 209, 197, 0.15);
+  border-color: var(--signal-teal-dim);
+  color: var(--signal-teal);
+}
+
+.question-badge.medium {
+  background: rgba(255, 159, 28, 0.15);
+  border-color: var(--signal-amber-dim);
+  color: var(--signal-amber);
+}
+
+.question-badge.hard {
+  background: rgba(230, 88, 79, 0.15);
+  border-color: var(--signal-rose-dim);
+  color: var(--signal-rose);
+}
+
+.question-badge.type {
+  background: rgba(55, 138, 221, 0.15);
+  border-color: #378add66;
+  color: #378add;
 }
 
 /* ---------- Score readout ---------- */
