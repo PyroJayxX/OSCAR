@@ -1,0 +1,62 @@
+{
+  "data_science": {
+    "label": "Data Science",
+    "questions": [
+      "Explain the bias-variance tradeoff and how it influences model selection.",
+      "How would you handle a dataset with significant class imbalance?",
+      "Walk me through how you'd validate that an A/B test result is statistically significant.",
+      "What is the difference between L1 and L2 regularization, and when would you use each?",
+      "How do you detect and handle multicollinearity in a regression model?",
+      "Explain how a random forest works and why it tends to reduce overfitting compared to a single decision tree.",
+      "You're given a dataset with a lot of missing values. Walk me through your approach to handling them.",
+      "What metrics would you use to evaluate a classification model on an imbalanced dataset, and why not just accuracy?",
+      "Explain the difference between bagging and boosting.",
+      "How would you design an experiment to measure the causal effect of a new feature on user retention?"
+    ]
+  },
+  "system_design": {
+    "label": "System Design",
+    "questions": [
+      "Design a URL shortening service like bit.ly. What are the key components and how do they scale?",
+      "How would you design a rate limiter for a public API?",
+      "Design a notification system that can send push, email, and SMS to millions of users.",
+      "Walk me through designing a distributed cache. What consistency and eviction tradeoffs would you make?",
+      "How would you design a system to handle real-time chat for millions of concurrent users?",
+      "Design a news feed system like Twitter's timeline. How do you handle fan-out on write vs. read?",
+      "How would you design a distributed job scheduler that guarantees at-least-once execution?",
+      "Design a file storage service like Dropbox. How do you handle sync and conflict resolution?",
+      "How would you shard a relational database that's outgrown a single instance?",
+      "Design an API for a ride-sharing app's driver-matching system. What are the key latency and consistency concerns?"
+    ]
+  },
+  "behavioral": {
+    "label": "Behavioral",
+    "questions": [
+      "Tell me about a time you disagreed with a teammate or manager. How did you handle it?",
+      "Describe a project that failed. What went wrong and what did you learn?",
+      "Tell me about a time you had to deliver difficult feedback to someone.",
+      "Describe a situation where you had to make a decision with incomplete information.",
+      "Tell me about a time you had to push back on a deadline or scope you thought was unrealistic.",
+      "Describe a time you took on something outside your job description.",
+      "Tell me about a time you mentored or helped a struggling teammate.",
+      "Describe a time you had to influence a decision without having direct authority.",
+      "Tell me about a time you made a mistake that impacted others. How did you handle it?",
+      "Describe a time you had to balance competing priorities from different stakeholders."
+    ]
+  },
+  "frontend": {
+    "label": "Frontend",
+    "questions": [
+      "Explain the difference between the virtual DOM and the real DOM, and why it matters for performance.",
+      "How does the browser's event loop work, and how does that affect async code in JavaScript?",
+      "Walk me through how you'd optimize the load time of a React app with a large bundle size.",
+      "What are React hooks, and what problem do they solve compared to class components?",
+      "How would you implement accessible keyboard navigation for a custom dropdown component?",
+      "Explain the difference between CSS specificity, the cascade, and inheritance.",
+      "How does React's reconciliation algorithm decide what to re-render?",
+      "What's the difference between server-side rendering, static generation, and client-side rendering, and when would you choose each?",
+      "How would you debug a memory leak in a long-running single-page app?",
+      "Explain how you would design a design system's component API to be both flexible and hard to misuse."
+    ]
+  }
+}
