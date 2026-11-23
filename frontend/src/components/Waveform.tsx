@@ -5,6 +5,7 @@ type WaveformMode = "flat" | "live" | "ambient";
 interface WaveformProps {
   mode: WaveformMode;
   getAnalyser?: () => AnalyserNode | null;
+  className?: string;
 }
 
 const REDUCED_MOTION =
@@ -23,7 +24,7 @@ function lerpColor(a: [number, number, number], b: [number, number, number], t: 
 
 const RING_COUNT = 7;
 
-export function Waveform({ mode, getAnalyser }: WaveformProps) {
+export function Waveform({ mode, getAnalyser, className }: WaveformProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<number | null>(null);
   const energyRef = useRef(0);
@@ -112,5 +113,5 @@ export function Waveform({ mode, getAnalyser }: WaveformProps) {
     };
   }, [mode, getAnalyser]);
 
-  return <canvas ref={canvasRef} className="waveform-canvas" />;
+  return <canvas ref={canvasRef} className={`waveform-canvas ${className ?? ""}`} />;
 }

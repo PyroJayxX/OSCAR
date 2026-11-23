@@ -46,6 +46,12 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 
+# Environment
+.env
+
+# Piper TTS models
+piper_models/
+
 # Logs
 *.log
 npm-debug.log*
@@ -56,3 +62,5 @@ yarn-error.log*
 .coverage
 htmlcov/
 .pytest_cache/
+
+venv/
