@@ -283,6 +283,7 @@ function App() {
 
       {/* Left edge: Persona buttons */}
       <div className={`floating-rail personas ${isMobile && showPersonaMenu ? "open" : ""}`} role="group" aria-label="Select interviewer persona">
+        <div className="floating-rail-label">Choose a Persona</div>
         {personas.map((p) => (
           <button
             key={p.id}
@@ -310,6 +311,7 @@ function App() {
 
       {/* Right edge: Topic buttons */}
       <div className={`floating-rail topics ${isMobile && showTopicMenu ? "open" : ""}`} role="group" aria-label="Select topic category">
+        <div className="floating-rail-label">Choose a Topic</div>
         {categories.map((c) => (
           <button
             key={c.id}
@@ -368,6 +370,15 @@ function App() {
       {/* Center: Blob + Transcript */}
       <main className="stage">
         <div className="stage-inner">
+          {/* Static hero title at top */}
+          <div className="hero-title">
+            <h1>OSCAR</h1>
+            <div className="hero-acronym">
+              <span>On-the-spot Speech & Communication Analysis Reviewer</span>
+            </div>
+            <p className="hero-subtext">Your next-gen AI larping assistant</p>
+          </div>
+
           {errorMessage && (
             <div className="error-banner" role="alert">
               {errorMessage}

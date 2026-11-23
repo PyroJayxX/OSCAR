@@ -6,13 +6,11 @@ from app.config import QUESTIONS_PATH
 
 # Category labels for display
 CATEGORY_LABELS = {
-    "sql": "SQL",
-    "python": "Python",
+    "data_engineering": "Data Engineering",
     "ml": "Machine Learning",
     "genai": "GenAI",
     "rest_api": "REST APIs",
-    "power_bi": "Power BI",
-    "data_basics": "Data Basics",
+    "data_analytics": "Data Analytics",
     "behavioral": "Behavioral",
 }
 

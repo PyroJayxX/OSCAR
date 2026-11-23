@@ -1,5 +1,7 @@
 # OSCAR
 
+> Note: This app is purely vibe-coded just for fun, not a serious product. It is not affiliated with any company or organization.
+
 **O**n-the-spot **S**peech & **C**ommunication **A**nalysis **R**eviewer — a fully local, no-cloud
 voice mock interview trainer. Pick a category and an interviewer persona, answer out loud (or by
 typing), and get an AI-graded score with persona-toned feedback. Everything runs on your machine:

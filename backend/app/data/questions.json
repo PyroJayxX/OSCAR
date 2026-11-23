@@ -1,7 +1,92 @@
 [
   {
-    "id": "sql-001",
-    "topic": "sql",
+    "id": "data_engineering-001",
+    "topic": "data_engineering",
+    "difficulty": "easy",
+    "type": "concept",
+    "text": "What is the difference between structured, semi-structured, and unstructured data?",
+    "key_points": [
+      "Structured: tabular, fixed schema (SQL tables, CSV)",
+      "Semi-structured: self-describing, flexible schema (JSON, XML, Parquet)",
+      "Unstructured: no predefined model (text, images, audio, video)",
+      "Structured is easiest to query; unstructured needs processing (NLP, CV)",
+      "Semi-structured sits in between — schema-on-read"
+    ],
+    "common_mistakes": [
+      "Calling CSV unstructured (it's structured)",
+      "Thinking JSON is unstructured (it's semi-structured)",
+      "Assuming unstructured data can't be analyzed"
+    ],
+    "model_answer": "Structured data has a fixed schema like database tables or CSV — rows and columns. Semi-structured data like JSON or Parquet has tags or keys that describe the data but the schema can vary per record. Unstructured data has no predefined format — think raw text, images, audio. Most analytics starts with structured; semi-structured is common in modern data lakes; unstructured needs NLP or computer vision to extract signals.",
+    "generated": true
+  },
+  {
+    "id": "data_engineering-002",
+    "topic": "data_engineering",
+    "difficulty": "medium",
+    "type": "concept",
+    "text": "What is the difference between a calculated column and a measure in Power BI (DAX)?",
+    "key_points": [
+      "Calculated column: computed row-by-row at data refresh, stored in model",
+      "Measure: computed on-the-fly at query time based on filter context",
+      "Columns increase model size; measures don't",
+      "Use columns for row-level attributes; measures for aggregations",
+      "Measures respond to slicers/filters dynamically; columns don't"
+    ],
+    "common_mistakes": [
+      "Creating calculated columns for aggregations (use measures)",
+      "Not understanding filter context vs row context",
+      "Using columns when measures would be more efficient"
+    ],
+    "model_answer": "A calculated column is computed for every row when the data refreshes and stored in the model — like adding a 'Full Name' column. A measure is calculated at query time based on the current filter context — like 'Total Sales' which changes when you slice by region. Columns take up memory; measures don't. Use columns for row-level attributes, measures for anything aggregated.",
+    "generated": true
+  },
+  {
+    "id": "data_engineering-003",
+    "topic": "data_engineering",
+    "difficulty": "medium",
+    "type": "problem_solving",
+    "text": "A stakeholder asks for a dashboard showing 'customer health score' but can't define it. How do you proceed?",
+    "key_points": [
+      "Ask clarifying questions: what behaviors indicate health? (usage, support tickets, NPS)",
+      "Propose a measurable definition: weighted composite of available metrics",
+      "Start simple: 2-3 key metrics, equal weights, iterate with feedback",
+      "Document assumptions and get sign-off before building",
+      "Plan for evolution: score will change as business learns"
+    ],
+    "common_mistakes": [
+      "Building without a definition (wasted effort)",
+      "Over-engineering with ML when simple rules work",
+      "Not involving the stakeholder in defining success"
+    ],
+    "model_answer": "I'd schedule a short meeting to understand what 'healthy' means to them — is it login frequency, feature adoption, low support tickets, high NPS? Then I'd propose a simple weighted score using 2-3 metrics we already track, like weekly active users and ticket count. We'd agree on weights, build a v1 dashboard, and iterate. The key is making the definition explicit and measurable so we can track whether the score actually predicts retention.",
+    "generated": true
+  },
+  {
+    "id": "data_engineering-004",
+    "topic": "data_engineering",
+    "difficulty": "medium",
+    "type": "problem_solving",
+    "text": "You have a fact table with 10M rows and a dimension table with 500K rows. The report is slow. What DAX or modeling optimizations would you try?",
+    "key_points": [
+      "Remove unnecessary columns from both tables (reduce memory)",
+      "Use integer surrogate keys instead of string keys for relationships",
+      "Set appropriate data types (avoid high-precision decimals)",
+      "Create aggregations or summary tables for common queries",
+      "Use variables (VAR) in DAX to avoid repeated computation",
+      "Consider DirectQuery vs Import mode tradeoffs"
+    ],
+    "common_mistakes": [
+      "Adding indexes in DAX (not a thing — DAX isn't SQL)",
+      "Bi-directional filters causing ambiguity and performance hits",
+      "Not measuring with DAX Studio or Performance Analyzer first"
+    ],
+    "model_answer": "First, I'd profile with DAX Studio to find the slow measures. Then: drop unused columns, switch string keys to integer surrogates, use VAR in DAX to compute once and reuse. If specific visuals are slow, I'd create a pre-aggregated summary table at the grain those visuals need. Also check for bi-directional filters that might be causing the engine to do extra work. Import mode is usually faster than DirectQuery for this size.",
+    "generated": true
+  },
+  {
+    "id": "data_analytics-001",
+    "topic": "data_analytics",
     "difficulty": "easy",
     "type": "concept",
     "text": "What is the difference between INNER JOIN and LEFT JOIN in SQL?",
@@ -21,8 +106,8 @@
     "generated": true
   },
   {
-    "id": "sql-002",
-    "topic": "sql",
+    "id": "data_analytics-002",
+    "topic": "data_analytics",
     "difficulty": "medium",
     "type": "unknown_term",
     "text": "How would you use a window function to calculate a running total of sales by date?",
@@ -40,48 +125,6 @@
       "Not understanding frame clauses (ROWS vs RANGE, UNBOUNDED PRECEDING)"
     ],
     "model_answer": "I'd use SUM(sales) OVER (ORDER BY sale_date ROWS UNBOUNDED PRECEDING) to get a running total. The ORDER BY defines the sequence, and UNBOUNDED PRECEDING means start from the first row. If I needed it per store, I'd add PARTITION BY store_id. I haven't used window functions extensively in production, so I'd verify the exact syntax and test with sample data first.",
-    "generated": true
-  },
-  {
-    "id": "python-001",
-    "topic": "python",
-    "difficulty": "easy",
-    "type": "concept",
-    "text": "What is the difference between a list and a tuple in Python?",
-    "key_points": [
-      "Lists are mutable (can be changed after creation); tuples are immutable",
-      "Lists use square brackets []; tuples use parentheses ()",
-      "Tuples can be dictionary keys; lists cannot (unhashable)",
-      "Tuples are slightly more memory-efficient and faster for iteration",
-      "Use tuples for fixed collections, lists for collections that change"
-    ],
-    "common_mistakes": [
-      "Trying to modify a tuple element (raises TypeError)",
-      "Using a list as a dictionary key",
-      "Assuming tuples are always faster — difference is negligible in most cases"
-    ],
-    "model_answer": "Lists are mutable — you can append, remove, or change elements. Tuples are immutable once created. That's why tuples can be dictionary keys but lists can't. I'd use a tuple for things that shouldn't change, like coordinates (x, y), and a list for things I need to modify, like a queue of tasks.",
-    "generated": true
-  },
-  {
-    "id": "python-002",
-    "topic": "python",
-    "difficulty": "medium",
-    "type": "problem_solving",
-    "text": "Write a function that takes a list of dictionaries and returns only the dicts where 'status' equals 'active'.",
-    "key_points": [
-      "Use list comprehension: [d for d in data if d.get('status') == 'active']",
-      "Use .get() to avoid KeyError if 'status' key is missing",
-      "Alternative: filter() with lambda function",
-      "Handle edge cases: empty list, missing keys, None values",
-      "Return new list, don't mutate input"
-    ],
-    "common_mistakes": [
-      "Using d['status'] directly (raises KeyError if missing)",
-      "Mutating the original list instead of creating a new one",
-      "Forgetting to handle None or empty input"
-    ],
-    "model_answer": "I'd write a list comprehension: [item for item in data if item.get('status') == 'active']. Using .get() is safer than bracket notation because it returns None instead of crashing if the key doesn't exist. This creates a new list without modifying the original data.",
     "generated": true
   },
   {
@@ -210,91 +253,6 @@
       "Allowing unbounded page_size leading to performance issues"
     ],
     "model_answer": "I'd use GET /api/users with query params: page, page_size, and optional filters like name, email, role. Response includes the user array plus metadata — total_count, current page, page_size, total_pages. I'd cap page_size at 100 and return 400 for invalid values. For very large datasets, cursor-based pagination with a 'next_cursor' token scales better than offset/limit.",
-    "generated": true
-  },
-  {
-    "id": "power_bi-001",
-    "topic": "power_bi",
-    "difficulty": "easy",
-    "type": "concept",
-    "text": "What is the difference between a calculated column and a measure in Power BI (DAX)?",
-    "key_points": [
-      "Calculated column: computed row-by-row at data refresh, stored in model",
-      "Measure: computed on-the-fly at query time based on filter context",
-      "Columns increase model size; measures don't",
-      "Use columns for row-level attributes; measures for aggregations",
-      "Measures respond to slicers/filters dynamically; columns don't"
-    ],
-    "common_mistakes": [
-      "Creating calculated columns for aggregations (use measures)",
-      "Not understanding filter context vs row context",
-      "Using columns when measures would be more efficient"
-    ],
-    "model_answer": "A calculated column is computed for every row when the data refreshes and stored in the model — like adding a 'Full Name' column. A measure is calculated at query time based on the current filter context — like 'Total Sales' which changes when you slice by region. Columns take up memory; measures don't. Use columns for row-level attributes, measures for anything aggregated.",
-    "generated": true
-  },
-  {
-    "id": "power_bi-002",
-    "topic": "power_bi",
-    "difficulty": "medium",
-    "type": "problem_solving",
-    "text": "You have a fact table with 10M rows and a dimension table with 500K rows. The report is slow. What DAX or modeling optimizations would you try?",
-    "key_points": [
-      "Remove unnecessary columns from both tables (reduce memory)",
-      "Use integer surrogate keys instead of string keys for relationships",
-      "Set appropriate data types (avoid high-precision decimals)",
-      "Create aggregations or summary tables for common queries",
-      "Use variables (VAR) in DAX to avoid repeated computation",
-      "Consider DirectQuery vs Import mode tradeoffs"
-    ],
-    "common_mistakes": [
-      "Adding indexes in DAX (not a thing — DAX isn't SQL)",
-      "Bi-directional filters causing ambiguity and performance hits",
-      "Not measuring with DAX Studio or Performance Analyzer first"
-    ],
-    "model_answer": "First, I'd profile with DAX Studio to find the slow measures. Then: drop unused columns, switch string keys to integer surrogates, use VAR in DAX to compute once and reuse. If specific visuals are slow, I'd create a pre-aggregated summary table at the grain those visuals need. Also check for bi-directional filters that might be causing the engine to do extra work. Import mode is usually faster than DirectQuery for this size.",
-    "generated": true
-  },
-  {
-    "id": "data_basics-001",
-    "topic": "data_basics",
-    "difficulty": "easy",
-    "type": "concept",
-    "text": "What is the difference between structured, semi-structured, and unstructured data?",
-    "key_points": [
-      "Structured: tabular, fixed schema (SQL tables, CSV)",
-      "Semi-structured: self-describing, flexible schema (JSON, XML, Parquet)",
-      "Unstructured: no predefined model (text, images, audio, video)",
-      "Structured is easiest to query; unstructured needs processing (NLP, CV)",
-      "Semi-structured sits in between — schema-on-read"
-    ],
-    "common_mistakes": [
-      "Calling CSV unstructured (it's structured)",
-      "Thinking JSON is unstructured (it's semi-structured)",
-      "Assuming unstructured data can't be analyzed"
-    ],
-    "model_answer": "Structured data has a fixed schema like database tables or CSV — rows and columns. Semi-structured data like JSON or Parquet has tags or keys that describe the data but the schema can vary per record. Unstructured data has no predefined format — think raw text, images, audio. Most analytics starts with structured; semi-structured is common in modern data lakes; unstructured needs NLP or computer vision to extract signals.",
-    "generated": true
-  },
-  {
-    "id": "data_basics-002",
-    "topic": "data_basics",
-    "difficulty": "medium",
-    "type": "problem_solving",
-    "text": "A stakeholder asks for a dashboard showing 'customer health score' but can't define it. How do you proceed?",
-    "key_points": [
-      "Ask clarifying questions: what behaviors indicate health? (usage, support tickets, NPS)",
-      "Propose a measurable definition: weighted composite of available metrics",
-      "Start simple: 2-3 key metrics, equal weights, iterate with feedback",
-      "Document assumptions and get sign-off before building",
-      "Plan for evolution: score will change as business learns"
-    ],
-    "common_mistakes": [
-      "Building without a definition (wasted effort)",
-      "Over-engineering with ML when simple rules work",
-      "Not involving the stakeholder in defining success"
-    ],
-    "model_answer": "I'd schedule a short meeting to understand what 'healthy' means to them — is it login frequency, feature adoption, low support tickets, high NPS? Then I'd propose a simple weighted score using 2-3 metrics we already track, like weekly active users and ticket count. We'd agree on weights, build a v1 dashboard, and iterate. The key is making the definition explicit and measurable so we can track whether the score actually predicts retention.",
     "generated": true
   },
   {

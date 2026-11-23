@@ -1,6 +1,11 @@
 /* ---------- Layout shell ---------- */
 
 .app-shell {
+  /* Layout variables: the rails and the stage both read these */
+  --rail-w: 200px; /* width of each floating button */
+  --content-w: 720px; /* max width of the center column */
+  --rail-gap: 24px; /* space between rail and center column */
+
   position: relative;
   display: flex;
   min-height: 100svh;
@@ -166,21 +171,40 @@
 
 .floating-rail {
   position: fixed;
-  top: 50%;
-  transform: translateY(-50%);
+  top: var(--space-8);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
   z-index: 15;
   pointer-events: none; /* Let clicks through to buttons */
 }
 
+.floating-rail-label {
+  pointer-events: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  padding: var(--space-1) var(--space-3);
+  margin-bottom: var(--space-2);
+  white-space: nowrap;
+  width: var(--rail-w);
+  text-align: center;
+}
+
+/* Outer edge of each rail = half the content width + gap + button width,
+   measured from the screen center. max() pins it to the screen edge on
+   narrow windows so it can never go off-screen. */
 .floating-rail.personas {
-  left: var(--space-4);
+  left: max(var(--space-5), calc(50% - var(--content-w) / 2 - var(--rail-gap) - var(--rail-w)));
+  align-items: flex-end; /* Buttons align right (toward center) */
 }
 
 .floating-rail.topics {
-  right: var(--space-4);
+  right: max(var(--space-5), calc(50% - var(--content-w) / 2 - var(--rail-gap) - var(--rail-w)));
+  align-items: flex-start; /* Buttons align left (toward center) */
 }
 
 /* Mobile: floating rails become bottom menus */
@@ -232,12 +256,18 @@
     visibility: visible;
     transform: translateY(0);
   }
+
+  /* Hide labels on mobile since rails become horizontal menus */
+  .floating-rail .floating-rail-label {
+    display: none;
+  }
 }
 
 .float-btn {
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   background: var(--bg-panel);
@@ -250,6 +280,7 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   transition: all 150ms ease;
   cursor: pointer;
+  width: var(--rail-w); /* Same width for all buttons */
 }
 
 .float-btn:hover:not(:disabled) {
@@ -286,12 +317,7 @@
 }
 
 .float-btn-label {
-  display: none; /* Hidden by default, shown on hover/focus for icon-only */
-}
-
-.float-btn:hover .float-btn-label,
-.float-btn:focus-visible .float-btn-label {
-  display: inline;
+  display: inline; /* Always show labels - no hover needed */
 }
 
 @media (max-width: 700px) {
@@ -315,6 +341,23 @@
   display: none;
 }
 
+/* Mid-size screens: icon-only rails so the center column isn't squeezed */
+@media (min-width: 701px) and (max-width: 1000px) {
+  .app-shell {
+    --rail-w: 44px;
+  }
+
+  .float-btn-label {
+    display: none;
+  }
+
+  .float-btn:not(.float-btn-menu-toggle) {
+    height: 44px;
+    padding: var(--space-2);
+    justify-content: center;
+  }
+}
+
 /* ---------- Stage (center content) ---------- */
 
 .stage {
@@ -327,20 +370,81 @@
   min-width: 0;
 }
 
+/* Desktop: reserve room on both sides so content never slides under the rails */
+@media (min-width: 701px) {
+  .stage {
+    padding-inline: calc(var(--rail-w) + var(--space-5) + var(--rail-gap));
+  }
+}
+
 .stage-inner {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--content-w);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-5);
 }
 
+/* ---------- Hero title ---------- */
+
+.hero-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.hero-title h1 {
+  font-family: var(--font-display);
+  font-size: clamp(36px, 6vw, 56px);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.hero-acronym {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
+.hero-acronym span {
+  white-space: nowrap;
+}
+
+.hero-acronym span:not(:last-child)::after {
+  content: "·";
+  margin-left: 4px;
+  opacity: 0.5;
+}
+
+.hero-subtext {
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 400px;
+  margin: 0;
+}
+
 /* ---------- Hero blob ---------- */
 
 .blob-wrapper {
-  width: min(70vw, 45vh);
-  max-width: 380px;
+  width: min(45vw, 30vh);
+  max-width: 260px;
   aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
@@ -351,8 +455,8 @@
 .hero-blob {
   width: 100%;
   height: 100%;
-  max-width: 380px;
-  max-height: 380px;
+  max-width: 260px;
+  max-height: 260px;
 }
 
 /* Mobile: smaller blob at top */
@@ -363,13 +467,13 @@
   }
 
   .blob-wrapper {
-    width: min(85vw, 35vh);
-    max-width: 280px;
+    width: min(60vw, 25vh);
+    max-width: 200px;
   }
 
   .hero-blob {
-    max-width: 280px;
-    max-height: 280px;
+    max-width: 200px;
+    max-height: 200px;
   }
 }
 

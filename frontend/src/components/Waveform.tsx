@@ -3,7 +3,7 @@ import type { MutableRefObject } from "react";
 
 // ─── Constants (tweak these) ────────────────────────────────────────────────
 const POINT_COUNT = 16; // more lobes = spikier shape
-const RADIUS_RATIO = 0.2; // base radius as a fraction of the canvas size
+const RADIUS_RATIO = 0.38; // base radius as a fraction of the canvas size
 const MAX_DISTORTION_RATIO = 0.9; // how far loud audio can push a point (fraction of its radius)
 const IDLE_TARGET = 0.02;
 const LOUDNESS_GAIN = 1.4; // how much loudness adds on top of the idle target
