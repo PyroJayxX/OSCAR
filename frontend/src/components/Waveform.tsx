@@ -33,6 +33,7 @@ interface WaveformProps {
   className?: string; // applied to the wrapper div
   simulateSpeaking?: boolean; // dev-only: fake loudness envelope
   debug?: boolean; // draws loudness/amp numbers on the canvas
+  audioElement?: HTMLAudioElement | null; // audio element to analyze (AI voice)
 }
 
 interface ControlPoint {
@@ -108,49 +109,6 @@ function colorAt(color: string | string[], ts: number, cycleMs: number): [number
 }
 
 // ─── Loudness hooks (write to a ref, so no re-render every frame) ───────────
-function useMicLoudness(source: MediaStream | null): MutableRefObject<number> {
-  const loudnessRef = useRef(0);
-
-  useEffect(() => {
-    loudnessRef.current = 0;
-    if (!source) return;
-
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    const ctx = new AudioCtx();
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.3;
-    const data = new Uint8Array(analyser.fftSize);
-
-    const src = ctx.createMediaStreamSource(source);
-    // IMPORTANT: never connect the mic to ctx.destination (it would play through the speakers)
-    src.connect(analyser);
-
-    let raf = 0;
-    const tick = () => {
-      analyser.getByteTimeDomainData(data);
-      let sum = 0;
-      for (let i = 0; i < data.length; i++) {
-        const v = data[i] / 128 - 1;
-        sum += v * v;
-      }
-      const rms = Math.sqrt(sum / data.length);
-      loudnessRef.current = Math.min(1, rms * 5); // speech RMS is usually only 0.05–0.2
-      raf = requestAnimationFrame(tick);
-    };
-    tick();
-
-    return () => {
-      cancelAnimationFrame(raf);
-      src.disconnect();
-      ctx.close();
-      loudnessRef.current = 0;
-    };
-  }, [source]);
-
-  return loudnessRef;
-}
-
 function useSimulatedLoudness(enabled: boolean): MutableRefObject<number> {
   const loudnessRef = useRef(0);
 
@@ -178,6 +136,116 @@ function useSimulatedLoudness(enabled: boolean): MutableRefObject<number> {
   return loudnessRef;
 }
 
+// Single shared AudioContext to avoid "already connected" errors when
+// rapidly swapping audio elements (each HTMLMediaElement can only have one
+// MediaElementSourceNode in its lifetime).
+let sharedAudioCtx: AudioContext | null = null;
+
+function getSharedAudioContext(): AudioContext {
+  if (!sharedAudioCtx) {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    sharedAudioCtx = new AudioCtx();
+  }
+  return sharedAudioCtx;
+}
+
+function useAudioElementLoudness(audioElement: HTMLAudioElement | null): MutableRefObject<number> {
+  const loudnessRef = useRef(0);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const elementRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    loudnessRef.current = 0;
+
+    if (!audioElement) {
+      // Clean up if element removed
+      if (sourceRef.current) {
+        sourceRef.current.disconnect();
+        sourceRef.current = null;
+      }
+      if (analyserRef.current) {
+        analyserRef.current.disconnect();
+        analyserRef.current = null;
+      }
+      elementRef.current = null;
+      return;
+    }
+
+    // If same element, reuse the setup
+    if (elementRef.current === audioElement && analyserRef.current && sourceRef.current) {
+      return;
+    }
+
+    // Clean up previous
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
+    }
+    if (analyserRef.current) {
+      analyserRef.current.disconnect();
+      analyserRef.current = null;
+    }
+
+    elementRef.current = audioElement;
+
+    const ctx = getSharedAudioContext();
+
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.3;
+    analyserRef.current = analyser;
+
+    let source: MediaElementAudioSourceNode;
+    try {
+      source = ctx.createMediaElementSource(audioElement);
+    } catch (e) {
+      // If the element already has a source (shouldn't happen with new Audio()),
+      // fall back to silent loudness
+      console.warn("createMediaElementSource failed:", e);
+      loudnessRef.current = 0;
+      return;
+    }
+    sourceRef.current = source;
+
+    // Connect: source -> analyser -> destination (so audio stays audible)
+    source.connect(analyser);
+    analyser.connect(ctx.destination);
+
+    const data = new Uint8Array(analyser.fftSize);
+
+    let raf = 0;
+    const tick = () => {
+      if (!analyserRef.current) return;
+      analyserRef.current.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = data[i] / 128 - 1;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / data.length);
+      loudnessRef.current = Math.min(1, rms * 5); // speech RMS is usually only 0.05–0.2
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      if (sourceRef.current) {
+        sourceRef.current.disconnect();
+        sourceRef.current = null;
+      }
+      if (analyserRef.current) {
+        analyserRef.current.disconnect();
+        analyserRef.current = null;
+      }
+      loudnessRef.current = 0;
+    };
+  }, [audioElement]);
+
+  return loudnessRef;
+}
+
 // ─── Main blob component ────────────────────────────────────────────────────
 export function Waveform({
   mode,
@@ -187,6 +255,7 @@ export function Waveform({
   className,
   simulateSpeaking = false,
   debug = false,
+  audioElement = null,
 }: WaveformProps) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -195,11 +264,8 @@ export function Waveform({
     Array.from({ length: POINT_COUNT }, (_, i) => makePoint((i / POINT_COUNT) * Math.PI * 2, i * 1000))
   );
 
-  // Microphone
-  const [micStream, setMicStream] = useState<MediaStream | null>(null);
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const micLoudness = useMicLoudness(micStream);
   const simLoudness = useSimulatedLoudness(simulateSpeaking);
+  const audioLoudness = useAudioElementLoudness(audioElement);
 
   const isActive = mode === "active" || simulateSpeaking;
 
@@ -222,30 +288,6 @@ export function Waveform({
     ro.observe(wrap);
     return () => ro.disconnect();
   }, []);
-
-  // Open the mic only while active (and not simulating)
-  useEffect(() => {
-    let cancelled = false;
-    if (mode === "active" && !simulateSpeaking) {
-      navigator.mediaDevices
-        .getUserMedia({ audio: true })
-        .then((stream) => {
-          if (cancelled) {
-            stream.getTracks().forEach((t) => t.stop());
-            return;
-          }
-          micStreamRef.current = stream;
-          setMicStream(stream);
-        })
-        .catch(console.error);
-    }
-    return () => {
-      cancelled = true;
-      micStreamRef.current?.getTracks().forEach((t) => t.stop());
-      micStreamRef.current = null;
-      setMicStream(null);
-    };
-  }, [mode, simulateSpeaking]);
 
   // Animation loop (restarts only when the canvas size changes)
   useEffect(() => {
@@ -270,7 +312,8 @@ export function Waveform({
     const render = (ts: number) => {
       const live = liveRef.current;
       const loud =
-        live.loudnessProp ?? (live.simulateSpeaking ? simLoudness.current : micLoudness.current);
+        live.loudnessProp ??
+        (live.simulateSpeaking ? simLoudness.current : audioLoudness.current);
 
       // Clamped so the blob can never grow past the canvas edge
       const target = live.isActive ? Math.min(1, IDLE_TARGET + loud * LOUDNESS_GAIN) : IDLE_TARGET;
@@ -326,7 +369,7 @@ export function Waveform({
 
     raf = requestAnimationFrame(render);
     return () => cancelAnimationFrame(raf);
-  }, [size, points, simLoudness, micLoudness]);
+  }, [size, points, simLoudness, audioLoudness]);
 
   return (
     <div

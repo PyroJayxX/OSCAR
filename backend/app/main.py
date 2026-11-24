@@ -1,12 +1,14 @@
+import io
 import json
 from contextlib import asynccontextmanager
+from pydantic import BaseModel
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
-from app import db, grading, personas, questions, stt
+from app import db, grading, personas, questions, stt, tts
 from app.config import CORS_ORIGINS, GROQ_API_KEY, LLM_PROVIDER
 from app.schemas import (
     AttemptDetail,
@@ -18,6 +20,7 @@ from app.schemas import (
     QuestionOut,
     TranscribeOut,
 )
+from app.tts import synthesize_wav
 
 
 @asynccontextmanager
@@ -79,6 +82,18 @@ async def post_transcribe(file: UploadFile):
     wav_bytes = await file.read()
     text = stt.transcribe(wav_bytes)
     return {"text": text}
+
+
+class TTSIn(BaseModel):
+    text: str
+
+
+@app.post("/api/tts")
+async def post_tts(body: TTSIn):
+    if not body.text or not body.text.strip():
+        raise HTTPException(status_code=400, detail="Text is empty")
+    wav_bytes = synthesize_wav(body.text.strip())
+    return StreamingResponse(io.BytesIO(wav_bytes), media_type="audio/wav")
 
 
 def _ndjson(obj: dict) -> bytes:

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import "./App.css";
 import { api, type AttemptSummary, type Category, type Persona } from "./api/client";
 import { Waveform, SimulateToggle } from "./components/Waveform";
@@ -52,6 +52,19 @@ function App() {
   // Dev-only simulate speaking
   const [simulateSpeaking, setSimulateSpeaking] = useState(false);
 
+  // TTS audio playback
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(() => {
+    try {
+      return localStorage.getItem("oscar_tts_enabled") !== "false";
+    } catch {
+      return true;
+    }
+  });
+  const [showPlayButton, setShowPlayButton] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+
   useEffect(() => {
     api.getCategories().then(setCategories).catch((e) => setErrorMessage(e.message));
     api.getPersonas().then(setPersonas).catch((e) => setErrorMessage(e.message));
@@ -71,6 +84,29 @@ function App() {
     }
   }, [transcriptLines]);
 
+  // Audio event handlers
+  const handleAudioEnded = useCallback(() => {
+    setIsPlaying(false);
+    setShowPlayButton(true); // Show replay/play button after audio finishes
+  }, []);
+
+  const handleAudioError = useCallback(() => {
+    setIsPlaying(false);
+    setShowPlayButton(true);
+    console.error("Audio error");
+  }, []);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+        audioRef.current.load();
+      }
+    };
+  }, []);
+
   const fetchQuestion = async (category: string) => {
     setErrorMessage(null);
     try {
@@ -81,6 +117,11 @@ function App() {
       // Store difficulty and type for display
       setQuestionDifficulty(result.difficulty || null);
       setQuestionType(result.type || null);
+
+      // Fetch TTS audio for the new question (don't auto-play until user clicks Start)
+      if (ttsEnabled && result.question) {
+        await fetchAndPlayTTS(result.question, false);
+      }
     } catch (e) {
       // Handle "no more questions" case
       if (e instanceof Error && e.message.includes("No more questions")) {
@@ -93,6 +134,88 @@ function App() {
       setQuestionCommonMistakes([]);
       setQuestionDifficulty(null);
       setQuestionType(null);
+    }
+  };
+
+  const fetchAndPlayTTS = async (text: string, autoPlay = false) => {
+    if (!ttsEnabled) return;
+
+    try {
+      // Clean up previous audio
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+        audioRef.current.load();
+      }
+
+      const audio = new Audio();
+      audioRef.current = audio;
+      audio.onended = handleAudioEnded;
+      audio.onerror = handleAudioError;
+
+      const response = await fetch(`http://localhost:8000/api/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!response.ok) {
+        throw new Error("TTS request failed");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      audio.src = url;
+
+      // Only try to autoplay if user has clicked Start or it's a replay
+      if (autoPlay) {
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              setIsPlaying(true);
+              setShowPlayButton(false);
+            })
+            .catch(() => {
+              // Autoplay blocked - show play button
+              setShowPlayButton(true);
+              setIsPlaying(false);
+            });
+        }
+      } else {
+        // Don't autoplay - show play button
+        setShowPlayButton(true);
+        setIsPlaying(false);
+      }
+    } catch (err) {
+      console.error("TTS fetch/play error:", err);
+      setShowPlayButton(true);
+    }
+  };
+
+  const handlePlayQuestion = async () => {
+    if (!question || !ttsEnabled) return;
+    await fetchAndPlayTTS(question, true);
+  };
+
+  const handleReplayQuestion = async () => {
+    if (!question || !ttsEnabled) return;
+    await fetchAndPlayTTS(question, true);
+  };
+
+  const toggleTTS = () => {
+    const newValue = !ttsEnabled;
+    setTtsEnabled(newValue);
+    try {
+      localStorage.setItem("oscar_tts_enabled", String(newValue));
+    } catch {
+      // ignore localStorage errors
+    }
+    if (newValue && question && !isPlaying && !showPlayButton) {
+      fetchAndPlayTTS(question);
+    } else if (!newValue && audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
     }
   };
 
@@ -221,6 +344,12 @@ function App() {
   };
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 700;
+
+  // Blob is active only when AI is speaking (TTS playing or grading/narrating)
+  const blobActive = isPlaying || gradeStage === "speaking" || gradeStage === "scoring";
+
+  // Always show full question text
+  const getVisibleQuestionText = () => question || "";
 
   return (
     <div className="app-shell">
@@ -388,7 +517,7 @@ function App() {
           {!hasSetup ? (
             <div className="stage-empty">
               <div className="blob-wrapper">
-                <Waveform mode="idle" />
+                <Waveform mode="idle" color="#378ADD" />
               </div>
               <p className="text-secondary">Pick a topic and an interviewer to begin.</p>
             </div>
@@ -396,21 +525,38 @@ function App() {
             <>
               <div className="stage-empty">
                 <div className="blob-wrapper">
-                  <Waveform mode="idle" />
+                  <Waveform mode="idle" color="#378ADD" />
                 </div>
                 <p className="text-secondary">Loading your first question…</p>
               </div>
             </>
           ) : (
             <>
-              {/* Blob visualizer */}
+              {/* Blob visualizer - only reacts to AI voice (blue) */}
               <div className="blob-wrapper">
                 <Waveform
-                  mode={recorderStatus === "recording" || gradeStage === "speaking" || gradeStage === "scoring" ? "active" : "idle"}
+                  mode={blobActive ? "active" : "idle"}
+                  color="#378ADD"
+                  audioElement={audioRef.current}
                   simulateSpeaking={simulateSpeaking}
-                  color={simulateSpeaking ? "#378ADD" : undefined}
                 />
               </div>
+
+              {/* Start button - shows before user has started, BEFORE transcript */}
+              {!hasStarted && question && gradeStage === "idle" && (
+                <div className="start-overlay">
+                  <button
+                    className="start-btn"
+                    onClick={() => {
+                      setHasStarted(true);
+                      fetchAndPlayTTS(question, true);
+                    }}
+                    aria-label="Start interview"
+                  >
+                    Start
+                  </button>
+                </div>
+              )}
 
               {/* Live transcript */}
               <div className="transcript" ref={transcriptContainerRef} aria-live="polite" aria-atomic="false">
@@ -427,27 +573,67 @@ function App() {
                     <span className="transcript-cursor" aria-hidden="true"></span>
                   </div>
                 )}
-                {/* Show current question with difficulty/type labels */}
-                {question && gradeStage === "idle" && (
+                {/* Show current question with difficulty/type labels - revealed word by word during TTS */}
+                {question && gradeStage === "idle" && hasStarted && (
                   <div className="transcript-line current-question">
                     <span className="transcript-prefix">Question</span>
-                    <span className="transcript-text">{question}</span>
-                    {(questionDifficulty || questionType) && (
-                      <div className="question-meta">
-                        {questionDifficulty && (
-                          <span className={`question-badge ${questionDifficulty.toLowerCase()}`}>
-                            {questionDifficulty}
-                          </span>
+                    <span className="transcript-text">{getVisibleQuestionText()}</span>
+
+                    {/* Row: labels + TTS controls, side by side */}
+                    <div className="question-footer">
+                      {(questionDifficulty || questionType) && (
+                        <div className="question-meta">
+                          {questionDifficulty && (
+                            <span className={`question-badge ${questionDifficulty.toLowerCase()}`}>
+                              {questionDifficulty}
+                            </span>
+                          )}
+                          {questionType && (
+                            <span className="question-badge type">
+                              {questionType.replace(/_/g, " ")}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="question-tts-controls">
+                        {showPlayButton && (
+                          <button
+                            className="btn-icon tts-play-btn"
+                            onClick={handlePlayQuestion}
+                            aria-label="Play question"
+                            title="Play question"
+                          >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                          </button>
                         )}
-                        {questionType && (
-                          <span className="question-badge type">
-                            {questionType.replace("_", " ")}
-                          </span>
+                        {isPlaying && !showPlayButton && (
+                          <button
+                            className="btn-icon tts-replay-btn"
+                            onClick={handleReplayQuestion}
+                            aria-label="Replay question"
+                            title="Replay question"
+                          >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6"></path><path d="M1 20v-6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                          </button>
                         )}
+                        <label className="tts-toggle" title={ttsEnabled ? "Disable question audio" : "Enable question audio"}>
+                          <input
+                            type="checkbox"
+                            checked={ttsEnabled}
+                            onChange={toggleTTS}
+                            aria-label={ttsEnabled ? "Disable question audio" : "Enable question audio"}
+                          />
+                          <span className="tts-toggle-slider" aria-hidden="true"></span>
+                          <span className="tts-toggle-label mono" style={{ fontSize: 11, marginLeft: 6 }}>
+                            {ttsEnabled ? "TTS ON" : "TTS OFF"}
+                          </span>
+                        </label>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
+
               </div>
 
               {/* Answer input area */}
@@ -517,7 +703,7 @@ function App() {
                 </div>
               </div>
             </>
-        ))}
+          ))}
         </div>
       </main>
 

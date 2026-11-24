@@ -14,7 +14,7 @@ GROQ_FAST_MODEL = os.environ.get("GROQ_FAST_MODEL", "llama-3.1-8b-instant")
 GROQ_GRADING_MODEL = os.environ.get("GROQ_GRADING_MODEL", "llama-3.3-70b-versatile")
 
 # Piper TTS
-PIPER_VOICE = os.environ.get("PIPER_VOICE", "en_US-lessac-medium")
+PIPER_VOICE = os.environ.get("OSCAR_TTS_VOICE", "en_US-ryan-medium")
 PIPER_MODEL_DIR = os.environ.get("PIPER_MODEL_DIR", str(BACKEND_DIR / "piper_models"))
 
 # Whisper STT
