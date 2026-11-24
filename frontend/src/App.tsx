@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import "./App.css";
 import { api, type AttemptSummary, type Category, type Persona } from "./api/client";
-import { Waveform, SimulateToggle } from "./components/Waveform";
+import { Waveform } from "./components/Waveform";
 import { MicLevelBar, useMicLevel } from "./components/MicLevelBar";
 
 function App() {
@@ -29,7 +29,11 @@ function App() {
   const [historyAttempts, setHistoryAttempts] = useState<AttemptSummary[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const [answerMode, setAnswerMode] = useState<"record" | "type">("record");
+  // Input mode: verbal (speak) or text (type)
+  const [inputMode, setInputMode] = useState<"verbal" | "text">("verbal");
+  // Timer enabled for verbal mode (60s max)
+  const [timerEnabled, setTimerEnabled] = useState(true);
+
   const [transcript, setTranscript] = useState("");
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcribeError, setTranscribeError] = useState<string | null>(null);
@@ -46,6 +50,11 @@ function App() {
   const audioChunksRef = useRef<Blob[]>([]);
   const durationIntervalRef = useRef<number | null>(null);
 
+  // Timer state for verbal mode
+  const [recordingTimeLeft, setRecordingTimeLeft] = useState(60);
+  const recordingTimerRef = useRef<number | null>(null);
+  const [timerWarningShown, setTimerWarningShown] = useState(false);
+
   // Mic level visualization
   const micLevelRef = useMicLevel(mediaRecorderRef.current?.stream ?? null);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -60,9 +69,11 @@ function App() {
   // Floating menu state for mobile
   const [showPersonaMenu, setShowPersonaMenu] = useState(false);
   const [showTopicMenu, setShowTopicMenu] = useState(false);
+  const [showModeMenu, setShowModeMenu] = useState(false);
 
   // Dev-only simulate speaking
-  const [simulateSpeaking, setSimulateSpeaking] = useState(false);
+  const [simulateSpeaking] = useState(false);
+  // Note: simulateSpeaking is used in Waveform component for dev testing
 
   // TTS audio playback - use state so Waveform receives updated audio element immediately
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
@@ -101,7 +112,12 @@ function App() {
   const handleAudioEnded = useCallback(() => {
     setIsPlaying(false);
     setShowPlayButton(true); // Show replay/play button after audio finishes
-  }, []);
+
+    // Auto-start recording in verbal mode after TTS finishes
+    if (hasStarted && inputMode === "verbal" && gradeStage === "idle" && recorderStatus === "idle") {
+      startRecording();
+    }
+  }, [hasStarted, inputMode, gradeStage, recorderStatus]);
 
   const handleAudioError = useCallback(() => {
     setIsPlaying(false);
@@ -119,6 +135,55 @@ function App() {
       }
     };
   }, []);
+
+  // Timer logic for verbal mode recording
+  useEffect(() => {
+    if (recorderStatus === "recording" && timerEnabled && inputMode === "verbal" && !isPlaying) {
+      setRecordingTimeLeft(60);
+      setTimerWarningShown(false);
+      recordingTimerRef.current = window.setInterval(() => {
+        setRecordingTimeLeft((prev) => {
+          const next = prev - 1;
+          if (next === 10 && !timerWarningShown) {
+            setTimerWarningShown(true);
+            // Could play a warning sound here
+          }
+          if (next <= 0) {
+            // Time's up - stop recording and submit
+            if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+            stopRecordingAndSubmit();
+            return 0;
+          }
+          return next;
+        });
+      }, 1000);
+    } else {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    }
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    };
+  }, [recorderStatus, timerEnabled, inputMode, isPlaying]);
+
+  const stopRecordingAndSubmit = async () => {
+    const blob = await stopRecording();
+    if (!blob) return;
+    setIsTranscribing(true);
+    setTranscribeError(null);
+    try {
+      const wavBlob = await ensureWavBlob(blob);
+      const result = await api.transcribe(wavBlob);
+      const answerText = result.text.trim();
+      if (answerText) {
+        setTranscript(answerText);
+        runGrading(answerText);
+      }
+    } catch (err) {
+      setTranscribeError(err instanceof Error ? err.message : "Transcription failed");
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
 
   const fetchQuestion = async (category: string) => {
     setErrorMessage(null);
@@ -145,6 +210,17 @@ function App() {
       setQuestionType(null);
     }
   };
+
+  // Auto-start recording after TTS finishes in verbal mode
+  useEffect(() => {
+    if (!isPlaying && hasStarted && inputMode === "verbal" && gradeStage === "idle" && recorderStatus === "idle" && !showPlayButton) {
+      // Small delay to ensure TTS has fully stopped
+      const timeout = setTimeout(() => {
+        startRecording();
+      }, 300);
+      return () => clearTimeout(timeout);
+    }
+  }, [isPlaying, hasStarted, inputMode, gradeStage, recorderStatus, showPlayButton]);
 
   const fetchAndPlayTTS = async (text: string, autoPlay = false) => {
     if (!ttsEnabled) return;
@@ -271,11 +347,24 @@ function App() {
   }, [gradeStage, narrativeText, ttsEnabled]);
 
   const handleNextQuestion = async () => {
+    // Stop any currently playing TTS audio to prevent overlap
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
+      audioElementRef.current.src = "";
+      audioElementRef.current.load();
+    }
+    setIsPlaying(false);
+    setShowPlayButton(false);
+
+    // Reset session state for new question
     setGradeStage("idle");
     setNarrativeText("");
     setLastAnswerText("");
     setKnowledgeScore(null);
     setResponseScore(null);
+    setHasStarted(false); // Reset so Start button shows again
+    setTranscript("");
+    setTranscriptLines([]);
     if (selectedCategory) await fetchQuestion(selectedCategory);
   };
 
@@ -422,27 +511,6 @@ function App() {
     }
   };
 
-  const handleToggleRecord = async () => {
-    if (recorderStatus === "recording") {
-      const blob = await stopRecording();
-      if (!blob) return;
-      setIsTranscribing(true);
-      setTranscribeError(null);
-      try {
-        // Ensure we send a WAV blob that the backend can read
-        const wavBlob = await ensureWavBlob(blob);
-        const result = await api.transcribe(wavBlob);
-        setTranscript((prev) => (prev ? `${prev} ${result.text}` : result.text));
-      } catch (err) {
-        setTranscribeError(err instanceof Error ? err.message : "Transcription failed");
-      } finally {
-        setIsTranscribing(false);
-      }
-    } else {
-      await startRecording();
-    }
-  };
-
   const formatDuration = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -544,11 +612,90 @@ function App() {
             </button>
           ))}
         {isMobile && (
-          <button className="float-btn-menu-toggle" onClick={() => setShowPersonaMenu(!showPersonaMenu)} aria-label="Toggle persona menu" aria-expanded={showPersonaMenu}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-          </button>
+          <>
+            <button className="float-btn-menu-toggle" onClick={() => setShowPersonaMenu(!showPersonaMenu)} aria-label="Toggle persona menu" aria-expanded={showPersonaMenu}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </button>
+            {hasSetup && (
+              <button className="float-btn-menu-toggle" onClick={() => setShowModeMenu(!showModeMenu)} aria-label="Toggle mode settings" aria-expanded={showModeMenu}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+              </button>
+            )}
+          </>
         )}
       </div>
+
+      {/* Mode & Timer toggles below persona rail (desktop) / above topic rail (mobile) */}
+      {!isMobile && hasSetup && (
+        <div className="mode-toggles-rail" role="group" aria-label="Input mode and timer settings">
+          <div className="toggle-group">
+            <span className="toggle-label mono">Input</span>
+            <label className="switch" title={inputMode === "verbal" ? "Switch to text mode" : "Switch to verbal mode"}>
+              <input
+                type="checkbox"
+                checked={inputMode === "verbal"}
+                onChange={(e) => setInputMode(e.target.checked ? "verbal" : "text")}
+                aria-label={inputMode === "verbal" ? "Switch to text mode" : "Switch to verbal mode"}
+              />
+              <span className="switch-slider" aria-hidden="true"></span>
+              <span className="switch-text mono" style={{ fontSize: 11, marginLeft: 6 }}>
+                {inputMode === "verbal" ? "Verbal" : "Text"}
+              </span>
+            </label>
+          </div>
+          <div className="toggle-group">
+            <span className="toggle-label mono">Timer</span>
+            <label className="switch" title={timerEnabled ? "Disable 60s timer" : "Enable 60s timer"}>
+              <input
+                type="checkbox"
+                checked={timerEnabled}
+                onChange={(e) => setTimerEnabled(e.target.checked)}
+                aria-label={timerEnabled ? "Disable 60s timer" : "Enable 60s timer"}
+              />
+              <span className="switch-slider" aria-hidden="true"></span>
+              <span className="switch-text mono" style={{ fontSize: 11, marginLeft: 6 }}>
+                {timerEnabled ? "60s ON" : "60s OFF"}
+              </span>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile: Mode toggles as bottom bar (opens via menu button) */}
+      {isMobile && hasSetup && (
+        <div className={`mode-toggles-rail ${showModeMenu ? "open" : ""}`} role="group" aria-label="Input mode and timer settings">
+          <div className="toggle-group">
+            <span className="toggle-label mono">Input</span>
+            <label className="switch" title={inputMode === "verbal" ? "Switch to text mode" : "Switch to verbal mode"}>
+              <input
+                type="checkbox"
+                checked={inputMode === "verbal"}
+                onChange={(e) => setInputMode(e.target.checked ? "verbal" : "text")}
+                aria-label={inputMode === "verbal" ? "Switch to text mode" : "Switch to verbal mode"}
+              />
+              <span className="switch-slider" aria-hidden="true"></span>
+              <span className="switch-text mono" style={{ fontSize: 11, marginLeft: 6 }}>
+                {inputMode === "verbal" ? "Verbal" : "Text"}
+              </span>
+            </label>
+          </div>
+          <div className="toggle-group">
+            <span className="toggle-label mono">Timer</span>
+            <label className="switch" title={timerEnabled ? "Disable 60s timer" : "Enable 60s timer"}>
+              <input
+                type="checkbox"
+                checked={timerEnabled}
+                onChange={(e) => setTimerEnabled(e.target.checked)}
+                aria-label={timerEnabled ? "Disable 60s timer" : "Enable 60s timer"}
+              />
+              <span className="switch-slider" aria-hidden="true"></span>
+              <span className="switch-text mono" style={{ fontSize: 11, marginLeft: 6 }}>
+                {timerEnabled ? "60s ON" : "60s OFF"}
+              </span>
+            </label>
+          </div>
+        </div>
+      )}
 
       {/* Right edge: Topic buttons */}
       <div className={`floating-rail topics ${isMobile && showTopicMenu ? "open" : ""}`} role="group" aria-label="Select topic category">
@@ -807,78 +954,93 @@ function App() {
 
               {/* Answer input area */}
               <div className="answer-area">
-                {answerMode === "record" && (
+                {/* Verbal mode: recording UI with auto-start after TTS */}
+                {inputMode === "verbal" && (
                   <>
-                    {/* Mic level bar - visible only while recording */}
+                    {/* Recording status indicator */}
                     {recorderStatus === "recording" && (
-                      <MicLevelBar
-                        level={micLevelRef.current}
-                        isRecording={true}
-                        reducedMotion={reducedMotion}
-                      />
+                      <div className="recording-status">
+                        <MicLevelBar
+                          level={micLevelRef.current}
+                          isRecording={true}
+                          reducedMotion={reducedMotion}
+                          onSilence={() => stopRecordingAndSubmit()}
+                        />
+                        <div className="recording-main">
+                          <span className="recording-badge">
+                            <span className="recording-dot" aria-hidden="true"></span>
+                            Recording
+                          </span>
+                          <span className={`record-timer mono ${timerEnabled && recordingTimeLeft <= 10 ? "warning" : ""}`}>
+                            {timerEnabled
+                              ? `${recordingTimeLeft}s${recordingTimeLeft <= 10 ? " ⚠" : ""}`
+                              : formatDuration(recorderDuration)}
+                          </span>
+                        </div>
+                        <button
+                          className="end-recording-btn"
+                          onClick={stopRecordingAndSubmit}
+                          aria-label="Stop recording and submit"
+                          title="Stop recording and submit"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="16" rx="2"></rect></svg>
+                        </button>
+                      </div>
                     )}
-                    <div className="record-controls-row">
-                      <button
-                        className={`record-btn ${recorderStatus === "recording" ? "active" : ""}`}
-                        onClick={handleToggleRecord}
-                        disabled={isTranscribing}
-                        aria-label={recorderStatus === "recording" ? "Stop recording" : "Start recording"}
-                      >
-                      <span className="record-btn-dot" aria-hidden="true" />
-                      {recorderStatus === "recording" ? "Stop" : "Record answer"}
-                    </button>
-                    <span className="record-timer mono">
-                      {recorderStatus === "recording"
-                        ? formatDuration(recorderDuration)
-                        : isTranscribing
-                        ? "transcribing…"
-                        : ""}
-                    </span>
-                    {recorderError && <span className="field-error">{recorderError}</span>}
-                    {transcribeError && <span className="field-error">{transcribeError}</span>}
-                    {import.meta.env.DEV && (
-                      <SimulateToggle onChange={setSimulateSpeaking} />
+
+                    
+                    {/* Transcribing state */}
+                    {isTranscribing && (
+                      <div className="recording-status transcribing">
+                        <span className="recording-badge">⟳ Transcribing…</span>
+                      </div>
                     )}
-                    </div>
+
+                    {recorderError && <div className="field-error">{recorderError}</div>}
+                    {transcribeError && <div className="field-error">{transcribeError}</div>}
                   </>
                 )}
 
-                <label className="transcript-label mono" htmlFor="answer-text">
-                  {answerMode === "record" ? "Transcript (edit if needed)" : "Your answer"}
-                </label>
+                {/* Text mode: simple textarea */}
+                {inputMode === "text" && (
+                  <label className="transcript-label mono" htmlFor="answer-text">
+                    Your answer
+                  </label>
+                )}
+
                 <textarea
                   id="answer-text"
                   className="transcript-input"
-                  rows={answerMode === "record" ? 4 : 6}
+                  rows={inputMode === "verbal" ? 4 : 6}
                   value={transcript}
                   placeholder={
-                    answerMode === "record"
-                      ? "Recorded speech will appear here — you can fix any transcription errors before submitting."
+                    inputMode === "verbal"
+                      ? "Your spoken answer will appear here — you can edit before submitting."
                       : "Type your answer here…"
                   }
                   onChange={(e) => setTranscript(e.target.value)}
+                  disabled={isTranscribing || recorderStatus === "recording"}
                 />
 
                 <div className="answer-footer">
-                  <button
-                    className="btn-icon mode-toggle"
-                    onClick={() => setAnswerMode(answerMode === "record" ? "type" : "record")}
-                    aria-label={answerMode === "record" ? "Switch to typing mode" : "Switch to recording mode"}
-                    title={answerMode === "record" ? "Type answer" : "Speak answer"}
-                  >
-                    {answerMode === "record" ? (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
-                    ) : (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="19"></line></svg>
-                    )}
-                  </button>
-                  <button
-                    className="btn-primary submit-btn"
-                    onClick={() => runGrading(transcript.trim())}
-                    disabled={!transcript.trim() || isTranscribing || gradeStage !== "idle" || !hasSetup}
-                  >
-                    Submit answer
-                  </button>
+                  {inputMode === "text" && (
+                    <button
+                      className="btn-primary submit-btn"
+                      onClick={() => runGrading(transcript.trim())}
+                      disabled={!transcript.trim() || gradeStage !== "idle" || !hasSetup}
+                    >
+                      Submit answer
+                    </button>
+                  )}
+                  {inputMode === "verbal" && recorderStatus === "idle" && !isTranscribing && transcript.trim() && (
+                    <button
+                      className="btn-primary submit-btn"
+                      onClick={() => runGrading(transcript.trim())}
+                      disabled={gradeStage !== "idle" || !hasSetup}
+                    >
+                      Submit answer
+                    </button>
+                  )}
                 </div>
               </div>
             </>

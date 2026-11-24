@@ -232,7 +232,7 @@ export function MicLevelBar({
 
   return (
     <div
-      className="mic-level-bar"
+      className={`mic-level-bar ${isRecording ? "recording" : ""}`}
       role="img"
       aria-label="Microphone level"
       style={{ opacity, transition: "opacity 200ms ease" }}
@@ -252,7 +252,8 @@ export function MicLevelBar({
                 height: height,
                 margin: `0 ${BAR_GAP}px`,
                 transition: "height 50ms ease-out, background-color 100ms ease",
-                backgroundColor: level > 0.9 ? "var(--signal-rose)" : "var(--signal-teal)",
+                // Let CSS handle color when inside recording-status (red), otherwise use teal/rose for clipping
+                backgroundColor: undefined,
               }}
             />
           );

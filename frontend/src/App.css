@@ -261,6 +261,64 @@
   .floating-rail .floating-rail-label {
     display: none;
   }
+
+  /* Mobile: mode toggles as bottom bar (above persona rail) */
+  .mode-toggles-rail {
+    position: fixed;
+    left: var(--space-4);
+    right: var(--space-4);
+    bottom: 155px; /* Above persona rail (90px + ~65px rail height) */
+    top: auto;
+    flex-direction: row;
+    justify-content: center;
+    gap: var(--space-3);
+    max-width: calc(100vw - var(--space-8));
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(20px);
+    transition: opacity 200ms ease, visibility 200ms ease, transform 200ms ease;
+    pointer-events: auto;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    z-index: 15;
+  }
+
+  .mode-toggles-rail.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+
+  .toggle-group {
+    flex-direction: row;
+    align-items: center;
+    padding: var(--space-1) var(--space-2);
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    width: auto;
+  }
+
+  .toggle-label {
+    font-size: 9px;
+    margin-right: var(--space-2);
+  }
+
+  .radio-group {
+    flex-direction: row;
+    gap: var(--space-3);
+  }
+
+  .radio-text {
+    font-size: 12px;
+  }
+
+  .switch-text {
+    font-size: 10px;
+  }
 }
 
 .float-btn {
@@ -356,6 +414,310 @@
     padding: var(--space-2);
     justify-content: center;
   }
+}
+
+/* Mode & Timer toggles rail (desktop only) */
+.mode-toggles-rail {
+  position: fixed;
+  left: max(var(--space-5), calc(50% - var(--content-w) / 2 - var(--rail-gap) - var(--rail-w)));
+  top: calc(var(--space-8) + 5 * (var(--space-2) + 44px) + var(--space-4)); /* Below persona rail */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  z-index: 15;
+  pointer-events: none;
+}
+
+.toggle-group {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  width: var(--rail-w);
+}
+
+.toggle-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  padding: var(--space-1) 0;
+}
+
+.radio-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.radio-custom {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.radio-option:hover .radio-custom {
+  border-color: var(--signal-teal);
+}
+
+.radio-option input[type="radio"]:checked + .radio-custom {
+  border-color: var(--signal-amber);
+  background: var(--signal-amber);
+}
+
+.radio-option input[type="radio"]:checked + .radio-custom::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1a1200;
+}
+
+.radio-option input[type="radio"]:focus-visible + .radio-custom {
+  outline: 2px solid var(--signal-amber);
+  outline-offset: 2px;
+}
+
+.radio-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.radio-option input[type="radio"]:checked ~ .radio-text {
+  color: var(--text-primary);
+}
+
+/* Switch toggle for timer */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: var(--bg-inset);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.switch-slider::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: var(--text-tertiary);
+  border-radius: 50%;
+  transition: transform 0.2s ease, background 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.switch input[type="checkbox"]:checked + .switch-slider {
+  background: var(--signal-teal);
+  border-color: var(--signal-teal);
+}
+
+.switch input[type="checkbox"]:checked + .switch-slider::before {
+  transform: translateX(20px);
+  background: #fff;
+}
+
+.switch input[type="checkbox"]:focus-visible + .switch-slider {
+  outline: 2px solid var(--signal-amber);
+  outline-offset: 2px;
+}
+
+.switch-text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+/* Recording status */
+.recording-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-panel);
+  border: 1px solid var(--signal-rose);
+  border-radius: var(--radius-md);
+  animation: fade-in-up 200ms ease;
+}
+
+.recording-status.waiting {
+  border-color: var(--signal-amber);
+  background: rgba(255, 159, 28, 0.05);
+}
+
+.recording-status.transcribing {
+  border-color: var(--signal-amber);
+  background: rgba(255, 159, 28, 0.05);
+}
+
+.recording-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  justify-content: center;
+}
+
+.recording-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--signal-rose);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.recording-badge.listening {
+  color: var(--signal-amber);
+  animation: pulse-badge 1.5s ease-in-out infinite;
+}
+
+.recording-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--signal-rose);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(230, 88, 79, 0.5); opacity: 1; }
+  50% { box-shadow: 0 0 0 6px rgba(230, 88, 79, 0); opacity: 0.7; }
+}
+
+@keyframes pulse-badge {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.recording-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.end-recording-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--signal-rose);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  flex-shrink: 0;
+}
+
+.end-recording-btn:hover:not(:disabled) {
+  background: #ff7a72;
+  transform: scale(1.05);
+}
+
+.end-recording-btn:focus-visible {
+  outline: 2px solid var(--signal-amber);
+  outline-offset: 2px;
+}
+
+.end-recording-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Mic level bar - center and red for recording */
+.recording-status .mic-level-bar,
+.mic-level-bar.recording {
+  max-width: 100%;
+  width: 100%;
+  padding: var(--space-1) 0;
+}
+
+.recording-status .mic-level-bars,
+.mic-level-bar.recording .mic-level-bars {
+  justify-content: center;
+}
+
+.recording-status .mic-level-bar-item,
+.mic-level-bar.recording .mic-level-bar-item {
+  background: var(--signal-rose) !important;
+}
+
+.record-timer {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: var(--font-mono);
+  transition: color 0.2s ease;
+}
+
+.record-timer.warning {
+  color: var(--signal-amber);
+  animation: pulse-timer 1s ease-in-out infinite;
+}
+
+@keyframes pulse-timer {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
 /* ---------- Stage (center content) ---------- */
