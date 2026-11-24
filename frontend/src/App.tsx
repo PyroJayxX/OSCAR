@@ -263,6 +263,13 @@ function App() {
     }
   };
 
+  // Play TTS for grading narrative when grading is done
+  useEffect(() => {
+    if (gradeStage === "done" && narrativeText && ttsEnabled) {
+      fetchAndPlayTTS(narrativeText, true);
+    }
+  }, [gradeStage, narrativeText, ttsEnabled]);
+
   const handleNextQuestion = async () => {
     setGradeStage("idle");
     setNarrativeText("");
