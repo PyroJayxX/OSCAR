@@ -519,24 +519,30 @@ function App() {
       {/* Left edge: Persona buttons */}
       <div className={`floating-rail personas ${isMobile && showPersonaMenu ? "open" : ""}`} role="group" aria-label="Select interviewer persona">
         <div className="floating-rail-label">Choose a Persona</div>
-        {personas.map((p) => (
-          <button
-            key={p.id}
-            className={`float-btn persona ${selectedPersona === p.id ? "active" : ""}`}
-            onClick={() => {
-              setSelectedPersona(p.id);
-              if (isMobile) setShowPersonaMenu(false);
-            }}
-            aria-label={p.label}
-            aria-pressed={selectedPersona === p.id}
-            title={p.label}
-          >
-            <span className="float-btn-icon" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-            </span>
-            <span className="float-btn-label">{p.label}</span>
-          </button>
-        ))}
+        {personas
+          .filter((p) => p.id !== "rapid_fire")
+          .sort((a, b) => {
+            const order = ["neutral", "friendly", "strict", "gordon_ramsay"];
+            return order.indexOf(a.id) - order.indexOf(b.id);
+          })
+          .map((p) => (
+            <button
+              key={p.id}
+              className={`float-btn persona ${selectedPersona === p.id ? "active" : ""}`}
+              onClick={() => {
+                setSelectedPersona(p.id);
+                if (isMobile) setShowPersonaMenu(false);
+              }}
+              aria-label={p.label}
+              aria-pressed={selectedPersona === p.id}
+              title={p.label}
+            >
+              <span className="float-btn-icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              </span>
+              <span className="float-btn-label">{p.label}</span>
+            </button>
+          ))}
         {isMobile && (
           <button className="float-btn-menu-toggle" onClick={() => setShowPersonaMenu(!showPersonaMenu)} aria-label="Toggle persona menu" aria-expanded={showPersonaMenu}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
@@ -547,24 +553,37 @@ function App() {
       {/* Right edge: Topic buttons */}
       <div className={`floating-rail topics ${isMobile && showTopicMenu ? "open" : ""}`} role="group" aria-label="Select topic category">
         <div className="floating-rail-label">Choose a Topic</div>
-        {categories.map((c) => (
-          <button
-            key={c.id}
-            className={`float-btn topic ${selectedCategory === c.id ? "active" : ""}`}
-            onClick={() => {
-              setSelectedCategory(c.id);
-              if (isMobile) setShowTopicMenu(false);
-            }}
-            aria-label={c.label}
-            aria-pressed={selectedCategory === c.id}
-            title={c.label}
-          >
-            <span className="float-btn-icon" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-            </span>
-            <span className="float-btn-label">{c.label}</span>
-          </button>
-        ))}
+        {categories
+          .map((c) => {
+            // Rename specific categories
+            const renamedLabels: Record<string, string> = {
+              rest_api: "Software Engineering",
+              genai: "AI Engineering",
+            };
+            return { ...c, label: renamedLabels[c.id] || c.label };
+          })
+          .sort((a, b) => {
+            const order = ["behavioral", "rest_api", "genai", "ml", "data_engineering", "data_analytics"];
+            return order.indexOf(a.id) - order.indexOf(b.id);
+          })
+          .map((c) => (
+            <button
+              key={c.id}
+              className={`float-btn topic ${selectedCategory === c.id ? "active" : ""}`}
+              onClick={() => {
+                setSelectedCategory(c.id);
+                if (isMobile) setShowTopicMenu(false);
+              }}
+              aria-label={c.label}
+              aria-pressed={selectedCategory === c.id}
+              title={c.label}
+            >
+              <span className="float-btn-icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+              </span>
+              <span className="float-btn-label">{c.label}</span>
+            </button>
+          ))}
         <button
           className={`float-btn topic ${selectedCategory === "custom" ? "active" : ""}`}
           onClick={() => {
