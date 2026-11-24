@@ -172,8 +172,8 @@ function useAudioElementLoudness(audioElement: HTMLAudioElement | null): Mutable
       return;
     }
 
-    // If same element, reuse the setup
-    if (elementRef.current === audioElement && analyserRef.current && sourceRef.current) {
+    // If same element and same src, reuse the setup
+    if (elementRef.current === audioElement && analyserRef.current && sourceRef.current && elementRef.current.src === audioElement.src) {
       return;
     }
 
@@ -200,8 +200,8 @@ function useAudioElementLoudness(audioElement: HTMLAudioElement | null): Mutable
     try {
       source = ctx.createMediaElementSource(audioElement);
     } catch (e) {
-      // If the element already has a source (shouldn't happen with new Audio()),
-      // fall back to silent loudness
+      // If the element already has a source (e.g., from a previous render cycle that wasn't cleaned up),
+      // fall back to silent loudness - this shouldn't happen with new Audio() elements
       console.warn("createMediaElementSource failed:", e);
       loudnessRef.current = 0;
       return;

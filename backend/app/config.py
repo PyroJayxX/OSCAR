@@ -1,6 +1,9 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+load_dotenv()
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 # LLM Provider
@@ -10,8 +13,8 @@ MODEL_NAME = os.environ.get("OSCAR_MODEL_NAME", "qwen3.5:9b")
 
 # Groq settings
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_FAST_MODEL = os.environ.get("GROQ_FAST_MODEL", "llama-3.1-8b-instant")
-GROQ_GRADING_MODEL = os.environ.get("GROQ_GRADING_MODEL", "llama-3.3-70b-versatile")
+GROQ_FAST_MODEL = os.environ.get("GROQ_FAST_MODEL", "openai/gpt-oss-20b")
+GROQ_GRADING_MODEL = os.environ.get("GROQ_GRADING_MODEL", "openai/gpt-oss-120b")
 
 # Piper TTS
 PIPER_VOICE = os.environ.get("OSCAR_TTS_VOICE", "en_US-ryan-medium")

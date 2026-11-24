@@ -109,12 +109,10 @@ async def post_grade(body: GradeIn):
     if not body.answer_text.strip():
         raise HTTPException(status_code=400, detail="Answer text is empty")
 
-    # Get question details (key_points, common_mistakes) if not provided
-    q_details = questions.get_question_details(body.category)
-    if q_details is None:
-        raise HTTPException(status_code=404, detail="No more questions in this category for this session")
-    key_points = body.key_points if body.key_points else q_details.get("key_points", [])
-    common_mistakes = body.common_mistakes if body.common_mistakes else q_details.get("common_mistakes", [])
+    # Use key_points and common_mistakes from request body
+    # (frontend sends them with the question, so no need to fetch a new question)
+    key_points = body.key_points
+    common_mistakes = body.common_mistakes
 
     async def event_stream():
         try:
@@ -156,7 +154,27 @@ async def post_grade(body: GradeIn):
             )
             yield _ndjson({"type": "done", "id": attempt_id})
         except Exception as exc:  # noqa: BLE001 - surface any failure to the client
-            yield _ndjson({"type": "error", "message": str(exc)})
+            import traceback
+            error_msg = str(exc)
+            # Log full traceback to terminal
+            print(f"[GRADING ERROR] {error_msg}")
+            traceback.print_exc()
+
+            # Provide user-friendly error messages
+            if "GROQ_API_KEY not set" in error_msg or "GROQ_API_KEY" in error_msg:
+                user_msg = "GROQ_API_KEY missing — set it in .env or environment"
+            elif "Rate limited" in error_msg or "rate limited" in error_msg.lower() or "429" in error_msg:
+                user_msg = "Rate limited by provider — try again in a moment"
+            elif "model_not_found" in error_msg or "does not exist" in error_msg:
+                user_msg = "Model not available — check GROQ_FAST_MODEL / GROQ_GRADING_MODEL in config"
+            elif "Could not parse JSON" in error_msg or "invalid JSON" in error_msg.lower():
+                user_msg = "Model returned invalid JSON — try again"
+            elif "All connection attempts failed" in error_msg:
+                user_msg = "Could not reach LLM provider — check network and API key"
+            else:
+                user_msg = f"Grading failed: {error_msg}"
+
+            yield _ndjson({"type": "error", "message": user_msg})
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 

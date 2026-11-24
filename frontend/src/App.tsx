@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import "./App.css";
 import { api, type AttemptSummary, type Category, type Persona } from "./api/client";
 import { Waveform, SimulateToggle } from "./components/Waveform";
+import { MicLevelBar, useMicLevel } from "./components/MicLevelBar";
 
 function App() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -45,6 +46,17 @@ function App() {
   const audioChunksRef = useRef<Blob[]>([]);
   const durationIntervalRef = useRef<number | null>(null);
 
+  // Mic level visualization
+  const micLevelRef = useMicLevel(mediaRecorderRef.current?.stream ?? null);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReducedMotion(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
+    mq.addEventListener?.("change", handler);
+    return () => mq.removeEventListener?.("change", handler);
+  }, []);
+
   // Floating menu state for mobile
   const [showPersonaMenu, setShowPersonaMenu] = useState(false);
   const [showTopicMenu, setShowTopicMenu] = useState(false);
@@ -52,8 +64,9 @@ function App() {
   // Dev-only simulate speaking
   const [simulateSpeaking, setSimulateSpeaking] = useState(false);
 
-  // TTS audio playback
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // TTS audio playback - use state so Waveform receives updated audio element immediately
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null); // for cleanup
   const [isPlaying, setIsPlaying] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(() => {
     try {
@@ -99,10 +112,10 @@ function App() {
   // Cleanup audio on unmount
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = "";
-        audioRef.current.load();
+      if (audioElementRef.current) {
+        audioElementRef.current.pause();
+        audioElementRef.current.src = "";
+        audioElementRef.current.load();
       }
     };
   }, []);
@@ -117,11 +130,7 @@ function App() {
       // Store difficulty and type for display
       setQuestionDifficulty(result.difficulty || null);
       setQuestionType(result.type || null);
-
-      // Fetch TTS audio for the new question (don't auto-play until user clicks Start)
-      if (ttsEnabled && result.question) {
-        await fetchAndPlayTTS(result.question, false);
-      }
+      // TTS will be fetched when user clicks Start
     } catch (e) {
       // Handle "no more questions" case
       if (e instanceof Error && e.message.includes("No more questions")) {
@@ -141,15 +150,11 @@ function App() {
     if (!ttsEnabled) return;
 
     try {
-      // Clean up previous audio
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = "";
-        audioRef.current.load();
-      }
-
+      // Create a NEW audio element each time to avoid "already connected" MediaElementAudioSourceNode error
+      // An HTMLMediaElement can only have one MediaElementAudioSourceNode in its lifetime
       const audio = new Audio();
-      audioRef.current = audio;
+      setAudioElement(audio);
+      audioElementRef.current = audio;
       audio.onended = handleAudioEnded;
       audio.onerror = handleAudioError;
 
@@ -213,8 +218,8 @@ function App() {
     }
     if (newValue && question && !isPlaying && !showPlayButton) {
       fetchAndPlayTTS(question);
-    } else if (!newValue && audioRef.current) {
-      audioRef.current.pause();
+    } else if (!newValue && audioElement) {
+      audioElement.pause();
       setIsPlaying(false);
     }
   };
@@ -248,11 +253,13 @@ function App() {
           else if (event.type === "done") setGradeStage("done");
           else if (event.type === "error") {
             setGradeStage("error");
+            // Keep narrativeText to show the error message from backend
           }
         },
       );
     } catch (e) {
       setGradeStage("error");
+      setNarrativeText(e instanceof Error ? e.message : "Grading failed");
     }
   };
 
@@ -283,10 +290,24 @@ function App() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      // Prefer formats that backend (soundfile) can read natively
+      // Order of preference: wav, ogg, webm
+      let mimeType = "audio/wav";
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = "audio/ogg";
+      }
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = "audio/webm";
+      }
+      console.log("[Recording] Using mimeType:", mimeType);
+
+      mediaRecorderRef.current = new MediaRecorder(stream, { mimeType });
       audioChunksRef.current = [];
       mediaRecorderRef.current.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+        if (e.data.size > 0) {
+          console.log("[Recording] Chunk received:", e.data.size, "bytes, type:", e.data.type);
+          audioChunksRef.current.push(e.data);
+        }
       };
       mediaRecorderRef.current.start(100);
       setRecorderStatus("recording");
@@ -307,7 +328,10 @@ function App() {
         return;
       }
       mediaRecorderRef.current.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+        // Use the MediaRecorder's mimeType for the blob
+        const mimeType = mediaRecorderRef.current?.mimeType || "audio/wav";
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        console.log("[Recording] Blob created:", blob.size, "bytes, type:", blob.type);
         if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
         mediaRecorderRef.current!.stream.getTracks().forEach((t) => t.stop());
         setRecorderStatus("idle");
@@ -318,6 +342,79 @@ function App() {
     });
   };
 
+  // Convert blob to WAV if needed (for formats like webm that soundfile might not support)
+  const ensureWavBlob = async (blob: Blob): Promise<Blob> => {
+    // If already WAV or OGG (soundfile supports both), return as-is
+    if (blob.type === "audio/wav" || blob.type === "audio/ogg") {
+      return blob;
+    }
+    // For webm or other formats, try to convert using OfflineAudioContext
+    // This is a best-effort conversion
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+      // Create WAV from audioBuffer
+      const wavBlob = audioBufferToWav(audioBuffer);
+      console.log("[Recording] Converted to WAV:", wavBlob.size, "bytes");
+      return wavBlob;
+    } catch (e) {
+      console.warn("[Recording] Could not convert to WAV, sending original:", e);
+      return blob;
+    }
+  };
+
+  // Helper to convert AudioBuffer to WAV Blob
+  const audioBufferToWav = (audioBuffer: AudioBuffer): Blob => {
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const length = audioBuffer.length;
+    const bytesPerSample = 2; // 16-bit
+    const blockAlign = numChannels * bytesPerSample;
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = length * blockAlign;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    // RIFF header
+    writeString(view, 0, "RIFF");
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(view, 8, "WAVE");
+
+    // fmt chunk
+    writeString(view, 12, "fmt ");
+    view.setUint32(16, 16, true); // chunk size
+    view.setUint16(20, 1, true); // audio format (PCM)
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true); // bits per sample
+
+    // data chunk
+    writeString(view, 36, "data");
+    view.setUint32(40, dataSize, true);
+
+    // Write PCM data
+    let offset = 44;
+    for (let i = 0; i < length; i++) {
+      for (let ch = 0; ch < numChannels; ch++) {
+        const sample = Math.max(-1, Math.min(1, audioBuffer.getChannelData(ch)[i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+        offset += 2;
+      }
+    }
+
+    return new Blob([buffer], { type: "audio/wav" });
+  };
+
+  const writeString = (view: DataView, offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) {
+      view.setUint8(offset + i, str.charCodeAt(i));
+    }
+  };
+
   const handleToggleRecord = async () => {
     if (recorderStatus === "recording") {
       const blob = await stopRecording();
@@ -325,7 +422,9 @@ function App() {
       setIsTranscribing(true);
       setTranscribeError(null);
       try {
-        const result = await api.transcribe(blob);
+        // Ensure we send a WAV blob that the backend can read
+        const wavBlob = await ensureWavBlob(blob);
+        const result = await api.transcribe(wavBlob);
         setTranscript((prev) => (prev ? `${prev} ${result.text}` : result.text));
       } catch (err) {
         setTranscribeError(err instanceof Error ? err.message : "Transcription failed");
@@ -537,7 +636,7 @@ function App() {
                 <Waveform
                   mode={blobActive ? "active" : "idle"}
                   color="#378ADD"
-                  audioElement={audioRef.current}
+                  audioElement={audioElement}
                   simulateSpeaking={simulateSpeaking}
                 />
               </div>
@@ -573,6 +672,21 @@ function App() {
                     <span className="transcript-cursor" aria-hidden="true"></span>
                   </div>
                 )}
+
+                {/* Show feedback/narrative even when TTS is off and grading is done or errored */}
+                {gradeStage === "done" && narrativeText && (
+                  <div className="transcript-line ai">
+                    <span className="transcript-prefix">OSCAR</span>
+                    <span className="transcript-text">{narrativeText}</span>
+                  </div>
+                )}
+                {gradeStage === "error" && narrativeText && (
+                  <div className="transcript-line ai error-feedback">
+                    <span className="transcript-prefix">OSCAR</span>
+                    <span className="transcript-text">{narrativeText}</span>
+                  </div>
+                )}
+
                 {/* Show current question with difficulty/type labels - revealed word by word during TTS */}
                 {question && gradeStage === "idle" && hasStarted && (
                   <div className="transcript-line current-question">
@@ -634,18 +748,56 @@ function App() {
                   </div>
                 )}
 
+                {/* Scores display - visible after scoring completes (gradeStage !== "idle" && gradeStage !== "scoring") */}
+                {((gradeStage === "speaking" || gradeStage === "done" || gradeStage === "error") &&
+                  (_knowledgeScore !== null || _responseScore !== null)) && (
+                  <div className="transcript-line scores-display">
+                    <div className="scores-row">
+                      <span className="score-item mono" style={{
+                        color: _knowledgeScore !== null && _knowledgeScore >= 7.5 ? "var(--signal-sage)" :
+                               _knowledgeScore !== null && _knowledgeScore >= 5 ? "var(--signal-amber)" : "var(--signal-rose)"
+                      }}>
+                        Knowledge: {_knowledgeScore !== null ? `${_knowledgeScore}/10` : "—"}
+                      </span>
+                      <span className="score-item mono" style={{
+                        color: _responseScore !== null && _responseScore >= 7.5 ? "var(--signal-sage)" :
+                               _responseScore !== null && _responseScore >= 5 ? "var(--signal-amber)" : "var(--signal-rose)"
+                      }}>
+                        Response: {_responseScore !== null ? `${_responseScore}/10` : "—"}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Loading state during grading */}
+                {gradeStage === "scoring" && (
+                  <div className="transcript-line ai loading">
+                    <span className="transcript-prefix">OSCAR</span>
+                    <span className="transcript-text">Grading your answer…</span>
+                    <span className="transcript-cursor" aria-hidden="true"></span>
+                  </div>
+                )}
               </div>
 
               {/* Answer input area */}
               <div className="answer-area">
                 {answerMode === "record" && (
-                  <div className="record-controls-row">
-                    <button
-                      className={`record-btn ${recorderStatus === "recording" ? "active" : ""}`}
-                      onClick={handleToggleRecord}
-                      disabled={isTranscribing}
-                      aria-label={recorderStatus === "recording" ? "Stop recording" : "Start recording"}
-                    >
+                  <>
+                    {/* Mic level bar - visible only while recording */}
+                    {recorderStatus === "recording" && (
+                      <MicLevelBar
+                        level={micLevelRef.current}
+                        isRecording={true}
+                        reducedMotion={reducedMotion}
+                      />
+                    )}
+                    <div className="record-controls-row">
+                      <button
+                        className={`record-btn ${recorderStatus === "recording" ? "active" : ""}`}
+                        onClick={handleToggleRecord}
+                        disabled={isTranscribing}
+                        aria-label={recorderStatus === "recording" ? "Stop recording" : "Start recording"}
+                      >
                       <span className="record-btn-dot" aria-hidden="true" />
                       {recorderStatus === "recording" ? "Stop" : "Record answer"}
                     </button>
@@ -661,7 +813,8 @@ function App() {
                     {import.meta.env.DEV && (
                       <SimulateToggle onChange={setSimulateSpeaking} />
                     )}
-                  </div>
+                    </div>
+                  </>
                 )}
 
                 <label className="transcript-label mono" htmlFor="answer-text">
@@ -711,7 +864,10 @@ function App() {
       {(gradeStage !== "idle") && (
         <div className="grading-actions">
           {gradeStage === "error" ? (
-            <button className="btn-primary" onClick={() => runGrading(lastAnswerText)}>
+            <button className="btn-primary" onClick={() => {
+              setGradeStage("idle");
+              runGrading(lastAnswerText);
+            }}>
               Try again
             </button>
           ) : gradeStage === "done" ? (
