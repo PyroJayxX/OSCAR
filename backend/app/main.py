@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from app import db, grading, personas, questions, stt, tts
-from app.config import CORS_ORIGINS, GROQ_API_KEY, LLM_PROVIDER
+from app.config import CORS_ORIGINS, GROQ_API_KEY, LLM_PROVIDER, TTS_ENGINE, KOKORO_VOICE_MAP
 from app.schemas import (
     AttemptDetail,
     AttemptSummary,
@@ -20,7 +20,6 @@ from app.schemas import (
     QuestionOut,
     TranscribeOut,
 )
-from app.tts import synthesize_wav
 
 
 @asynccontextmanager
@@ -86,13 +85,32 @@ async def post_transcribe(file: UploadFile):
 
 class TTSIn(BaseModel):
     text: str
+    voice: str | None = None
+    speed: float | None = None
+    persona: str | None = None
 
 
 @app.post("/api/tts")
 async def post_tts(body: TTSIn):
     if not body.text or not body.text.strip():
         raise HTTPException(status_code=400, detail="Text is empty")
-    wav_bytes = synthesize_wav(body.text.strip())
+
+    if TTS_ENGINE == "kokoro":
+        from app.tts_kokoro import synthesize_wav as kokoro_synthesize
+        # Use persona-specific voice if provided, otherwise use voice parameter or default
+        if body.persona and body.persona in KOKORO_VOICE_MAP:
+            voice = KOKORO_VOICE_MAP[body.persona]
+        else:
+            voice = body.voice or "af_heart"
+        wav_bytes = kokoro_synthesize(
+            body.text.strip(),
+            voice=voice,
+            speed=body.speed or 1.0,
+        )
+    else:
+        from app.tts import synthesize_wav as piper_synthesize
+        wav_bytes = piper_synthesize(body.text.strip())
+
     return StreamingResponse(io.BytesIO(wav_bytes), media_type="audio/wav")
 
 

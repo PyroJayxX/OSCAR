@@ -16,9 +16,23 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_FAST_MODEL = os.environ.get("GROQ_FAST_MODEL", "openai/gpt-oss-20b")
 GROQ_GRADING_MODEL = os.environ.get("GROQ_GRADING_MODEL", "openai/gpt-oss-120b")
 
+# TTS Engine
+TTS_ENGINE = os.environ.get("TTS_ENGINE", "kokoro")  # "piper" or "kokoro"
+
 # Piper TTS
 PIPER_VOICE = os.environ.get("OSCAR_TTS_VOICE", "en_US-ryan-medium")
 PIPER_MODEL_DIR = os.environ.get("PIPER_MODEL_DIR", str(BACKEND_DIR / "piper_models"))
+
+# Kokoro TTS
+KOKORO_MODEL_DIR = os.environ.get("KOKORO_MODEL_DIR", str(BACKEND_DIR / "piper_models"))
+
+# Kokoro voice mapping per persona
+KOKORO_VOICE_MAP = {
+    "neutral": "am_fenrir",
+    "friendly": "af_heart",
+    "strict": "af_isabella",
+    "gordon_ramsay": "bm_george",
+}
 
 # Whisper STT
 WHISPER_MODEL_SIZE = os.environ.get("OSCAR_WHISPER_MODEL_SIZE", "base")

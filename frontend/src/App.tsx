@@ -237,7 +237,7 @@ function App() {
       const response = await fetch(`http://localhost:8000/api/tts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, persona: selectedPersona }),
       });
 
       if (!response.ok) {
@@ -344,7 +344,7 @@ function App() {
     if (gradeStage === "done" && narrativeText && ttsEnabled) {
       fetchAndPlayTTS(narrativeText, true);
     }
-  }, [gradeStage, narrativeText, ttsEnabled]);
+  }, [gradeStage, narrativeText, ttsEnabled, selectedPersona]);
 
   const handleNextQuestion = async () => {
     // Stop any currently playing TTS audio to prevent overlap
@@ -521,6 +521,15 @@ function App() {
 
   // Blob is active only when AI is speaking (TTS playing or grading/narrating)
   const blobActive = isPlaying || gradeStage === "speaking" || gradeStage === "scoring";
+
+  // Persona-specific visualizer colors
+  const personaVisualizerColors: Record<string, string> = {
+    neutral: "#378ADD", // Blue (default)
+    friendly: "#4ADE80", // Green
+    strict: "#FACC15", // Yellow
+    gordon_ramsay: "#EF4444", // Red
+  };
+  const visualizerColor = selectedPersona ? personaVisualizerColors[selectedPersona] : "#378ADD";
 
   // Always show full question text
   const getVisibleQuestionText = () => question || "";
@@ -804,11 +813,11 @@ function App() {
             </>
           ) : (
             <>
-              {/* Blob visualizer - only reacts to AI voice (blue) */}
+              {/* Blob visualizer - reacts to AI voice with persona-specific color */}
               <div className="blob-wrapper">
                 <Waveform
                   mode={blobActive ? "active" : "idle"}
-                  color="#378ADD"
+                  color={visualizerColor}
                   audioElement={audioElement}
                   simulateSpeaking={simulateSpeaking}
                 />
